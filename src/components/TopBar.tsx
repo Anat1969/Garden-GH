@@ -110,6 +110,17 @@ export function TopBar() {
           <b>תכנון גינה</b>
         </span>
       </Link>
+      <nav className="main-nav no-print" aria-label="אזורים ראשיים">
+        <Link className={`nav-tab ${here('/projects') ? 'active' : ''}`} to="/projects">
+          פרויקטים
+        </Link>
+        <Link className={`nav-tab ${here('/guide') ? 'active' : ''}`} to="/guide">
+          מדריך גינות
+        </Link>
+        <Link className={`nav-tab ${here('/prices') ? 'active' : ''}`} to="/prices">
+          מחירון
+        </Link>
+      </nav>
       <span className={`cloud-chip no-print ${userEmail && cloud === 'synced' ? 'synced' : ''} ${cloud === 'error' ? 'error' : ''}`}>{cloudText}</span>
       <button
         ref={btnRef}

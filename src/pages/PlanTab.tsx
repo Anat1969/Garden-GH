@@ -9,9 +9,9 @@ import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, GardenLine, GardenObject, Opening, OpeningType, Pt, Sketch, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
 import { NO_BASIS, numberedNames, fmtNum, polyLength, surfaceArea } from '../lib/bom'
-import { LABEL_TEXT } from '../lib/types'
+import { KIND_TEXT, LABEL_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
-import { boundsOf, handlePoints, setVertex, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
+import { boundsOf, elementPoints, handlePoints, setVertex, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
 import { IconBtn } from '../components/EditIcons'
 import { PLAN_FINISH, useFinish, type PlanFinish } from '../lib/finish'
 import { PageIntro } from '../components/PageIntro'
@@ -84,12 +84,17 @@ export default function PlanTab() {
   const [finish, setFinish] = useFinish<PlanFinish>('plan', 'texture')
   // גרירת ידית: קודקוד משטח או קו, קצה קיר, או פינת שינוי גודל של פריט
   const [vdrag, setVdrag] = useState<{ el: Element; idx: number; p: Pt } | null>(null)
-  const clip = useRef<Element | null>(null)
+  const clip = useRef<Element[]>([])
   const [snapHit, setSnapHit] = useState<Pt | null>(null)
   // עריכת מידה ישירות על התוכנית: תיבת קלט מעל תווית המידה
   const [dimEdit, setDimEdit] = useState<{ id: string; part: number | 'w' | 'd' | 'len'; value: string; sx: number; sy: number } | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const [moving, setMoving] = useState<{ el: Element; start: Pt; dx: number; dy: number } | null>(null)
+  const [moving, setMoving] = useState<{ els: Element[]; start: Pt; dx: number; dy: number } | null>(null)
+  // בחירה מרובה כמו בתוכנות שרטוט: האלמנט הראשי בכתובת (el), והשאר כאן
+  const [multi, setMulti] = useState<string[]>([])
+  // מסגרת בחירה: משמאל לימין בוחרת רק מה שבפנים, מימין לשמאל גם מה שנחתך
+  const [box, setBox] = useState<{ a: Pt; b: Pt; sx: number; ex: number; add: boolean } | null>(null)
+  const spaceDown = useRef(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ sx: number; sy: number; v: View; moved: boolean } | null>(null)
 
@@ -141,16 +146,34 @@ export default function PlanTab() {
     setParams(p, { replace: true })
     resetDraft()
   }
-  const select = (id: string | null) => {
+  const select = (id: string | null, keepMulti = false) => {
     const p = new URLSearchParams(params)
     if (id) p.set('el', id)
     else p.delete('el')
     setParams(p, { replace: true })
+    if (!keepMulti) setMulti([])
+  }
+  // בחירת קבוצה: הראשון ראשי, השאר בבחירה המרובה
+  const selectMany = (ids: string[]) => {
+    const uniq = [...new Set(ids)]
+    if (!uniq.length) {
+      select(null)
+      return
+    }
+    select(uniq[0], true)
+    setMulti(uniq.slice(1))
+  }
+  const toggleInSelection = (id: string) => {
+    const cur = [...(selId ? [selId] : []), ...multi.filter((x) => x !== selId)]
+    selectMany(cur.includes(id) ? cur.filter((x) => x !== id) : [id, ...cur])
   }
 
   const walls = variant.elements.filter((e): e is Wall => e.kind === 'wall')
   const names = useMemo(() => numberedNames(variant.elements), [variant.elements])
   const selected = variant.elements.find((e) => e.id === selId) ?? null
+  const selIds = new Set([...(selId ? [selId] : []), ...multi])
+  const selection = variant.elements.filter((e) => selIds.has(e.id))
+  const isMulti = selection.length > 1
 
   const toWorld = (clientX: number, clientY: number) => {
     const svg = svgRef.current!
@@ -379,10 +402,23 @@ export default function PlanTab() {
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // גלגלת (כפתור אמצעי) או רווח לחוץ: הזזת התצוגה, כמו בתוכנות שרטוט
+    if (e.button === 1 || (e.button === 0 && spaceDown.current)) {
+      e.preventDefault()
+      drag.current = { sx: e.clientX, sy: e.clientY, v: view, moved: true }
+      return
+    }
     if (e.button !== 0) return
     if (hasBasis && (tool === 'free' || tool === 'pen')) {
       ;(e.currentTarget as SVGSVGElement).setPointerCapture?.(e.pointerId)
       setStrokePts([toWorld(e.clientX, e.clientY)])
+      return
+    }
+    // כלי הבחירה: גרירה ברקע פותחת מסגרת בחירה. במגע: הזזת תצוגה
+    if (tool === 'select' && hasBasis && e.pointerType !== 'touch') {
+      ;(e.currentTarget as SVGSVGElement).setPointerCapture?.(e.pointerId)
+      const w = toWorld(e.clientX, e.clientY)
+      setBox({ a: w, b: w, sx: e.clientX, ex: e.clientX, add: e.shiftKey || e.ctrlKey || e.metaKey })
       return
     }
     drag.current = { sx: e.clientX, sy: e.clientY, v: view, moved: false }
@@ -400,10 +436,16 @@ export default function PlanTab() {
       setVdrag({ ...vdrag, p: hit ? hit.p : { x: snap(w.x), y: snap(w.y) } })
       return
     }
+    if (box) {
+      setBox({ ...box, b: w, ex: e.clientX })
+      return
+    }
     if (moving) {
       const raw = { dx: w.x - moving.start.x, dy: w.y - moving.start.y }
       if (snapOn) {
-        const sm = snapMove(moving.el, raw.dx, raw.dy, snapSet(variant.elements, moving.el.id), view.w / 70)
+        const ids = new Set(moving.els.map((x) => x.id))
+        const others = snapSet(variant.elements.filter((x) => !ids.has(x.id)))
+        const sm = snapMove(moving.els[0], raw.dx, raw.dy, others, view.w / 70)
         setSnapHit(sm.at)
         setMoving({ ...moving, dx: sm.dx, dy: sm.dy })
       } else setMoving({ ...moving, ...raw })
@@ -434,10 +476,43 @@ export default function PlanTab() {
       setSnapHit(null)
       return
     }
+    if (box) {
+      const bx = box
+      setBox(null)
+      // לחיצה בלי גרירה: ניקוי הבחירה
+      if (Math.abs(bx.ex - bx.sx) < 5 && Math.hypot(bx.b.x - bx.a.x, bx.b.y - bx.a.y) < view.w / 150) {
+        if (!bx.add) select(null)
+        return
+      }
+      const x0 = Math.min(bx.a.x, bx.b.x)
+      const x1 = Math.max(bx.a.x, bx.b.x)
+      const y0 = Math.min(bx.a.y, bx.b.y)
+      const y1 = Math.max(bx.a.y, bx.b.y)
+      const windowMode = bx.ex > bx.sx
+      const inside = (p: Pt) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1
+      const hits = variant.elements.filter((el) => {
+        if (el.kind === 'opening') return false
+        const pts = elementPoints(el)
+        if (!pts.length) return false
+        if (windowMode) return pts.every(inside)
+        const b = boundsOf([el])!
+        return pts.some(inside) || !(b.maxX < x0 || b.minX > x1 || b.maxY < y0 || b.minY > y1)
+      })
+      const ids = hits.map((h) => h.id)
+      selectMany(bx.add ? [...(selId ? [selId] : []), ...multi, ...ids] : ids)
+      if (ids.length) toast(`נבחרו ${new Set(bx.add ? [...selIds, ...ids] : ids).size} אלמנטים`)
+      return
+    }
     if (moving) {
       if (Math.hypot(moving.dx, moving.dy) > 0.02) {
-        const moved = moveElement(moving.el, r2(moving.dx), r2(moving.dy))
-        if (!(moved.kind === 'surface' && snapOn && mergeInto(moved))) upsertElement(project.id, moved)
+        const moved = moving.els.map((x) => moveElement(x, r2(moving.dx), r2(moving.dy)))
+        if (moved.length === 1) {
+          const m = moved[0]
+          if (!(m.kind === 'surface' && snapOn && mergeInto(m))) upsertElement(project.id, m)
+        } else {
+          const byId = new Map(moved.map((m) => [m.id, m]))
+          updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => byId.get(x.id) ?? x) }))
+        }
       }
       setMoving(null)
       setSnapHit(null)
@@ -474,29 +549,42 @@ export default function PlanTab() {
         setDimEdit(null)
       }
       if (e.key === 'Enter' && polyPts.length) finishPoly()
+      if (e.key === ' ' && !['BUTTON', 'A'].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault()
+        spaceDown.current = true
+      }
+      if (e.key === 'Escape' && selection.length) select(null)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && tool === 'select') {
+        e.preventDefault()
+        selectMany(variant.elements.filter((x) => x.kind !== 'opening').map((x) => x.id))
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selected && !polyPts.length) {
         e.preventDefault()
         deleteSelected()
       }
       // חיצים מזיזים את הנבחר: 5 ס"מ, ועם Shift 50 ס"מ
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
-      if (arrows[e.key] && selected && selected.kind !== 'opening') {
+      if (arrows[e.key] && selection.length) {
         e.preventDefault()
         const st = e.shiftKey ? 0.5 : 0.05
-        upsertElement(project.id, moveElement(selected, arrows[e.key][0] * st, arrows[e.key][1] * st), true)
+        const ids = new Set(selection.map((x) => x.id))
+        updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => (ids.has(x.id) && x.kind !== 'opening' ? moveElement(x, arrows[e.key][0] * st, arrows[e.key][1] * st) : x)) }), 'nudge')
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selected) {
         e.preventDefault()
         duplicateSelected()
       }
       if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'r' && selected) rotateSelected()
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selected) clip.current = selected
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip.current && clip.current.kind !== 'opening') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selection.length) {
+        clip.current = selection.filter((x) => x.kind !== 'opening')
+        toast(`הועתקו ${clip.current.length} אלמנטים`)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip.current.length) {
         e.preventDefault()
-        const copy = { ...moveElement(clip.current, 1, 1), id: uid(), approved: false, label: 'assumed' as const } as Element
-        clip.current = copy
-        upsertElement(project.id, copy)
-        select(copy.id)
+        const copies = clip.current.map((x) => ({ ...moveElement(x, 1, 1), id: uid(), approved: false, label: 'assumed' as const }) as Element)
+        clip.current = copies
+        updateVariant(project.id, (v) => ({ ...v, elements: [...v.elements, ...copies] }))
+        selectMany(copies.map((c) => c.id))
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -508,8 +596,15 @@ export default function PlanTab() {
         redo(project.id)
       }
     }
+    const onUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') spaceDown.current = false
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onUp)
+    }
   })
 
   // מרכוז התצוגה על אלמנט (בחירה מהרשימה או מהמודל)
@@ -531,20 +626,38 @@ export default function PlanTab() {
     }
   }, [focusParam]) // eslint-disable-line react-hooks/exhaustive-deps
   const deleteSelected = () => {
-    if (!selected) return
-    removeElement(project.id, selected.id)
+    if (!selection.length) return
+    if (selection.length === 1) removeElement(project.id, selection[0].id)
+    else {
+      const ids = new Set(selection.map((x) => x.id))
+      updateVariant(project.id, (v) => ({ ...v, elements: v.elements.filter((x) => !ids.has(x.id) && !(x.kind === 'opening' && ids.has(x.wallId))) }))
+    }
     select(null)
-    toast('האלמנט נמחק. ביטול: Ctrl+Z')
+    toast(selection.length > 1 ? `נמחקו ${selection.length} אלמנטים. ביטול: Ctrl+Z` : 'האלמנט נמחק. ביטול: Ctrl+Z')
   }
   const duplicateSelected = () => {
-    if (!selected || selected.kind === 'opening') return
-    const copy = { ...moveElement(selected, 0.5, 0.5), id: uid(), approved: false, label: 'assumed' as const, source: `העתק של ${names.get(selected.id) ?? ''}` } as Element
-    upsertElement(project.id, copy)
-    select(copy.id)
+    const src = selection.filter((x) => x.kind !== 'opening')
+    if (!src.length) return
+    const copies = src.map((x) => ({ ...moveElement(x, 0.5, 0.5), id: uid(), approved: false, label: 'assumed' as const, source: `העתק של ${names.get(x.id) ?? ''}` }) as Element)
+    updateVariant(project.id, (v) => ({ ...v, elements: [...v.elements, ...copies] }))
+    selectMany(copies.map((c) => c.id))
   }
   const rotateSelected = () => {
-    if (!selected) return
-    upsertElement(project.id, rotateElement(selected, 90))
+    if (!selection.length) return
+    if (selection.length === 1) {
+      upsertElement(project.id, rotateElement(selection[0], 90))
+      return
+    }
+    const b = boundsOf(selection)!
+    const c = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 }
+    const byId = new Map(selection.map((x) => [x.id, rotateElement(x, 90, c)]))
+    updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => byId.get(x.id) ?? x) }))
+  }
+  const approveSelected = () => {
+    const ids = new Set(selection.map((x) => x.id))
+    const lab = approvedLabel(project)
+    updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => (ids.has(x.id) && !x.approved ? ({ ...x, approved: true, label: x.label === 'estimated' ? lab : x.label } as Element) : x)) }))
+    toast(`אושרו ${ids.size} אלמנטים`)
   }
   const mergeSelected = () => {
     if (selected?.kind !== 'surface') return
@@ -647,15 +760,17 @@ export default function PlanTab() {
     .slice(0, 8)
   const pendingCount = variant.elements.filter((e) => !e.approved && (e.kind === 'wall' || e.kind === 'opening')).length
   const k = view.w / 900
-  const shown = variant.elements.map((e) => (moving && moving.el.id === e.id ? moveElement(e, moving.dx, moving.dy) : vdrag && vdrag.el.id === e.id ? setVertex(e, vdrag.idx, vdrag.p) : e))
+  const movingIds = new Set(moving?.els.map((x) => x.id) ?? [])
+  const shown = variant.elements.map((e) => (moving && movingIds.has(e.id) ? moveElement(e, moving.dx, moving.dy) : vdrag && vdrag.el.id === e.id ? setVertex(e, vdrag.idx, vdrag.p) : e))
   // טקסטורות בשימוש בתוכנית ובטיוטה
   const usedPatterns = new Map<string, { m: SurfaceMaterial; c?: string }>()
   for (const e of shown) if (e.kind === 'surface') usedPatterns.set(patternId(e.material, e.color), { m: e.material, c: e.color })
   usedPatterns.set(patternId(material, color ?? undefined), { m: material, c: color ?? undefined })
-  const startMove = (e: Element, ev: React.PointerEvent) => {
-    if (e.kind === 'opening') return
+  const startMove = (els: Element[], ev: React.PointerEvent) => {
+    const list = els.filter((x) => x.kind !== 'opening')
+    if (!list.length) return
     svgRef.current?.setPointerCapture?.(ev.pointerId)
-    setMoving({ el: e, start: toWorld(ev.clientX, ev.clientY), dx: 0, dy: 0 })
+    setMoving({ els: list, start: toWorld(ev.clientX, ev.clientY), dx: 0, dy: 0 })
   }
   const hint =
     tool === 'rect' || tool === 'wall' || tool === 'gwall' || tool === 'fence'
@@ -671,7 +786,7 @@ export default function PlanTab() {
               : tool === 'object'
                 ? 'לחיצה על התוכנית מניחה את הפריט. אחר כך אפשר לגרור אותו בכלי הבחירה.'
                 : tool === 'select'
-                  ? 'לחיצה בוחרת אלמנט, גרירה מזיזה אותו. גרירה ברקע מזיזה את התצוגה.'
+                  ? 'לחיצה בוחרת, Shift+לחיצה מוסיף. גרירה ברקע: מסגרת בחירה (משמאל לימין: רק מה שבפנים, מימין לשמאל: גם מה שנחתך). רווח או גלגלת לחוצה: הזזת תצוגה.'
                   : ''
 
   const surfacesCount = variant.elements.filter((e) => e.kind === 'surface').length
@@ -702,11 +817,17 @@ export default function PlanTab() {
         setMaterial={(m) => {
           setMaterial(m)
           setColor(null)
-          if (tool === 'select' && selected?.kind === 'surface') upsertElement(project.id, { ...selected, material: m, color: undefined })
+          if (tool === 'select' && selection.some((x) => x.kind === 'surface')) {
+            const ids = new Set(selection.filter((x) => x.kind === 'surface').map((x) => x.id))
+            updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => (ids.has(x.id) && x.kind === 'surface' ? { ...x, material: m, color: undefined } : x)) }))
+          }
         }}
         setColor={(c) => {
           setColor(c)
-          if (tool === 'select' && selected?.kind === 'surface') upsertElement(project.id, { ...selected, color: c ?? undefined })
+          if (tool === 'select' && selection.some((x) => x.kind === 'surface')) {
+            const ids = new Set(selection.filter((x) => x.kind === 'surface').map((x) => x.id))
+            updateVariant(project.id, (v) => ({ ...v, elements: v.elements.map((x) => (ids.has(x.id) && x.kind === 'surface' ? { ...x, color: c ?? undefined } : x)) }))
+          }
         }}
         setSketchColor={setSketchColor}
         setStroke={setPenStroke}
@@ -753,7 +874,21 @@ export default function PlanTab() {
               ))}
             </span>
           </div>
-          {selected && hasBasis && tool === 'select' && (
+          {isMulti && hasBasis && tool === 'select' && (
+            <div className="selbar" role="toolbar" aria-label="פעולות על הבחירה" data-testid="multi-bar">
+              <b>נבחרו {selection.length} אלמנטים</b>
+              <span className="muted" style={{ fontSize: 12 }}>
+                גרירה מזיזה את כולם · Shift+לחיצה מוסיף או מסיר
+              </span>
+              <span className="spacer" />
+              <IconBtn icon="approve" label="אישור כולם" onClick={approveSelected} />
+              <IconBtn icon="duplicate" label="שכפול" onClick={duplicateSelected} />
+              <IconBtn icon="rotate" label="סיבוב 90" onClick={rotateSelected} />
+              <IconBtn icon="delete" label="מחיקת הבחירה" className="danger" onClick={deleteSelected} />
+              <IconBtn icon="close" label="ביטול בחירה" className="ghost" onClick={() => select(null)} />
+            </div>
+          )}
+          {selected && !isMulti && hasBasis && tool === 'select' && (
             <div className="selbar" role="toolbar" aria-label="פעולות על האלמנט הנבחר">
               <b>{names.get(selected.id)}</b>
               <span className="muted" style={{ fontSize: 12 }}>
@@ -798,13 +933,23 @@ export default function PlanTab() {
               [...shown]
                 .sort((a, b) => order(a) - order(b))
                 .map((e) => {
-                  const sel = e.id === selId
+                  const sel = selIds.has(e.id)
                   const onDown = (ev: React.PointerEvent) => {
-                    if (tool !== 'select') return
+                    if (tool !== 'select' || ev.button !== 0 || spaceDown.current) return
                     ev.stopPropagation()
                     drag.current = null
+                    // Shift או Ctrl: הוספה או הסרה מהבחירה
+                    if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
+                      toggleInSelection(e.id)
+                      return
+                    }
+                    // גרירת אלמנט מתוך בחירה מרובה מזיזה את כולה
+                    if (sel && selection.length > 1) {
+                      startMove(selection, ev)
+                      return
+                    }
                     select(e.id)
-                    startMove(e, ev)
+                    startMove([e], ev)
                   }
                   const common = { onPointerDown: onDown, style: { cursor: tool === 'select' ? 'move' : undefined } as React.CSSProperties }
                   return <PlanShape key={e.id} e={e} sel={sel} k={k} walls={walls} common={common} finish={finish} />
@@ -815,8 +960,8 @@ export default function PlanTab() {
               <line x1={pending.x} y1={pending.y} x2={hover.x} y2={hover.y} stroke="#2f5d4a" strokeWidth={k * 3} strokeDasharray={`${k * 5} ${k * 3}`} />
             ))}
             {hasBasis && showDims && <PlanDims elements={shown.filter((e) => e.id !== selId)} k={k} />}
-            {hasBasis && selected && <SelDims e={shown.find((x) => x.id === selected.id) ?? selected} k={k} onEdit={openDimEdit} />}
-            {hasBasis && selected && tool === 'select' && !moving &&
+            {hasBasis && selected && !isMulti && <SelDims e={shown.find((x) => x.id === selected.id) ?? selected} k={k} onEdit={openDimEdit} />}
+            {hasBasis && selected && !isMulti && tool === 'select' && !moving &&
               handlePoints(shown.find((x) => x.id === selected.id) ?? selected).map((h, i) => (
                 <rect
                   key={i}
@@ -837,6 +982,20 @@ export default function PlanTab() {
                   }}
                 />
               ))}
+            {box && (
+              <rect
+                data-testid="select-box"
+                x={Math.min(box.a.x, box.b.x)}
+                y={Math.min(box.a.y, box.b.y)}
+                width={Math.abs(box.b.x - box.a.x)}
+                height={Math.abs(box.b.y - box.a.y)}
+                fill={box.ex > box.sx ? 'rgba(59,110,168,0.12)' : 'rgba(47,125,74,0.12)'}
+                stroke={box.ex > box.sx ? '#3b6ea8' : '#2f7d4a'}
+                strokeWidth={k * 1.4}
+                strokeDasharray={box.ex > box.sx ? undefined : `${k * 6} ${k * 4}`}
+                pointerEvents="none"
+              />
+            )}
             {snapHit && <circle cx={snapHit.x} cy={snapHit.y} r={k * 6} fill="none" stroke="#c0392b" strokeWidth={k * 1.6} />}
             {pending && <circle cx={pending.x} cy={pending.y} r={k * 5} fill="#2f5d4a" />}
             {polyPts.length > 0 && (
@@ -977,7 +1136,22 @@ export default function PlanTab() {
             </div>
           )}
 
-          {selected && hasBasis && <ElementEditor project={project} el={selected} elements={variant.elements} name={names.get(selected.id) ?? ''} onClose={() => select(null)} />}
+          {isMulti && hasBasis && (
+            <div className="card" data-testid="multi-editor">
+              <div className="eyebrow">בחירה מרובה</div>
+              <div className="h-section">{selection.length} אלמנטים</div>
+              <div className="muted" style={{ fontSize: 14, marginTop: 4 }}>
+                {Object.entries(selection.reduce<Record<string, number>>((a, x) => ({ ...a, [KIND_TEXT[x.kind]]: (a[KIND_TEXT[x.kind]] ?? 0) + 1 }), {}))
+                  .map(([k2, n]) => `${n} ${k2}`)
+                  .join(' · ')}
+              </div>
+              <ol className="steps-list" style={{ marginTop: 8 }}>
+                <li>חומר מהספרייה חל על כל המשטחים שנבחרו.</li>
+                <li>חיצים מזיזים את כולם, Delete מוחק, Ctrl+D משכפל, R מסובב סביב המרכז המשותף.</li>
+              </ol>
+            </div>
+          )}
+          {selected && !isMulti && hasBasis && <ElementEditor project={project} el={selected} elements={variant.elements} name={names.get(selected.id) ?? ''} onClose={() => select(null)} />}
 
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
@@ -997,8 +1171,12 @@ export default function PlanTab() {
                 {variant.elements.map((e) => (
                   <button
                     key={e.id}
-                    className={`el-item ${e.id === selId ? 'sel' : ''}`}
-                    onClick={() => {
+                    className={`el-item ${selIds.has(e.id) ? 'sel' : ''}`}
+                    onClick={(ev) => {
+                      if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
+                        toggleInSelection(e.id)
+                        return
+                      }
                       select(e.id)
                       focusOn(e)
                       if (tool !== 'select') setTool('select')

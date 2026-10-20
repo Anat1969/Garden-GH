@@ -514,3 +514,12 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
 .rule-val { font-family: var(--sans); font-weight: 700; font-size: 14px; padding: 2px 10px; border-radius: 999px; background: var(--accent); color: #fff; margin-inline-start: 0; }
 @media (max-width: 900px) { .rules-layout { grid-template-columns: minmax(0, 1fr); } .rules-scene-side { position: sticky; top: var(--bar-h); z-index: 3; } .rule-scene { aspect-ratio: 16 / 9; } }
 .back-btn { flex: 0 0 auto; }
+.main-nav { display: flex; gap: 2px; margin-inline-start: 12px; min-width: 0; }
+.nav-tab { padding: 7px 12px; border-radius: 10px; text-decoration: none; color: var(--ink-2); font-size: 15px; font-weight: 500; white-space: nowrap; transition: background .15s, color .15s; }
+.nav-tab:hover { background: var(--paper-2); color: var(--accent); }
+.nav-tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; }
+  .main-nav { order: 10; width: 100%; margin: 0; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 6px; }
+  .nav-tab { flex: 1 1 0; text-align: center; padding: 6px 4px; font-size: 14px; }
+}
