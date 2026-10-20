@@ -1,0 +1,19 @@
+{
+  "name": "Garden-GH: תכנון גינה מהיתר",
+  "short_name": "Garden-GH",
+  "description": "מהיתר בנייה למודל תלת-ממדי של הבית והגינה, כתב כמויות, שלבים ותקציב.",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#eceeec",
+  "theme_color": "#2f5d4a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
