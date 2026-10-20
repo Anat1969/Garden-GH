@@ -3,7 +3,8 @@ import { LABEL_TEXT, MATERIAL_TEXT, KIND_TEXT } from '../lib/types'
 import { removeElement, upsertElement } from '../lib/store'
 import { NumField, Num, Tag } from './ui'
 import { dimLabelText, dimsForElement } from '../lib/dims'
-import { surfaceArea } from '../lib/bom'
+import { polyLength, surfaceArea } from '../lib/bom'
+import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
 
 const len = (w: { x1: number; y1: number; x2: number; y2: number }) => Math.hypot(w.x2 - w.x1, w.y2 - w.y1)
 
@@ -85,6 +86,56 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
             {!el.poly && <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />}
             {!el.poly && <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />}
             <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
+            <ColorField value={el.color} fallback={MATERIALS[el.material].color} onChange={(c) => save({ color: c }, true)} />
+          </>
+        )}
+        {el.kind === 'object' && (
+          <>
+            <label className="field">
+              <span>סוג</span>
+              <select className="input" value={el.type} onChange={(e) => save({ type: e.target.value as ObjectType }, true)}>
+                {(Object.keys(OBJECTS) as ObjectType[]).map((k) => (
+                  <option key={k} value={k}>
+                    {OBJECTS[k].text}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />
+            <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />
+            <NumField label="גובה (מ')" value={el.h} onChange={(v) => v > 0 && save({ h: v })} />
+            <NumField label="סיבוב (מעלות)" value={el.rot} step={15} onChange={(v) => save({ rot: ((v % 360) + 360) % 360 }, true)} />
+            <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
+            <ColorField value={el.color} fallback={OBJECTS[el.type].color} onChange={(c) => save({ color: c }, true)} />
+          </>
+        )}
+        {el.kind === 'line' && (
+          <>
+            <label className="field">
+              <span>סוג</span>
+              <select className="input" value={el.type} onChange={(e) => save({ type: e.target.value as LineType }, true)}>
+                {(Object.keys(LINES) as LineType[]).map((k) => (
+                  <option key={k} value={k}>
+                    {LINES[k].text}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <NumField label="רוחב (מ')" value={el.width} step={0.05} onChange={(v) => v > 0 && save({ width: v })} />
+            <NumField label="גובה (מ')" value={el.height} step={0.05} onChange={(v) => v >= 0 && save({ height: v })} />
+            <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
+            <ColorField value={el.color} fallback={LINES[el.type].color} onChange={(c) => save({ color: c }, true)} />
+          </>
+        )}
+        {el.kind === 'sketch' && (
+          <>
+            <ColorField value={el.color} fallback="#1d2120" onChange={(c) => save({ color: c ?? '#1d2120' }, true)} />
+            <NumField label="עובי קו (מ')" value={el.stroke} step={0.01} onChange={(v) => v > 0 && save({ stroke: v }, true)} />
+            <label className="field" style={{ alignSelf: 'end' }}>
+              <span>
+                <input type="checkbox" checked={el.closed} onChange={(e) => save({ closed: e.target.checked }, true)} /> צורה סגורה
+              </span>
+            </label>
           </>
         )}
         {el.kind === 'fence' && (
@@ -116,6 +167,15 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
           {el.poly && <span className="muted" style={{ fontSize: 13 }}> · מצולע מההיתר ({el.poly.length} קודקודים)</span>}
         </div>
       )}
+      {el.kind === 'line' && (
+        <div style={{ marginTop: 10 }}>
+          אורך: <Num value={polyLength(el.pts)} unit="מ'" label={el.label} />
+        </div>
+      )}
+      {el.kind === 'object' && OBJECTS[el.type].note && <div className="notice pro" style={{ marginTop: 10 }}>{OBJECTS[el.type].note}</div>}
+      {el.kind === 'line' && LINES[el.type].note && <div className="notice pro" style={{ marginTop: 10 }}>{LINES[el.type].note}</div>}
+      {el.kind === 'line' && el.type === 'low_wall' && el.height > 1 && <div className="notice pro" style={{ marginTop: 10 }}>קיר מעל מטר או קיר תומך: דורש מהנדס מוסמך.</div>}
+      {el.kind === 'sketch' && <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>שרטוט חופשי לסקיצה בלבד. לא נכנס לכתב הכמויות.</div>}
       {el.kind === 'fence' && el.boundary && <div className="notice" style={{ marginTop: 10 }}>גבול מגרש בהיתר: לאימות במדידה.</div>}
       {el.kind === 'wall' && el.scope === 'garden' && el.height > 1 && <div className="notice pro" style={{ marginTop: 10 }}>קיר מעל מטר או קיר תומך: דורש מהנדס מוסמך.</div>}
 
@@ -152,6 +212,22 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
 }
 
 const round = (v: number) => Math.round(v * 100) / 100
+
+function ColorField({ value, fallback, onChange }: { value?: string; fallback: string; onChange: (c: string | undefined) => void }) {
+  return (
+    <label className="field">
+      <span>צבע</span>
+      <span className="row" style={{ gap: 6 }}>
+        <input type="color" value={value ?? fallback} onChange={(e) => onChange(e.target.value)} aria-label="צבע האלמנט" />
+        {value && (
+          <button type="button" className="btn small ghost" onClick={() => onChange(undefined)}>
+            ברירת מחדל
+          </button>
+        )}
+      </span>
+    </label>
+  )
+}
 
 // מידה כתובה מההיתר שמתאימה לאלמנט: לחיצה מחילה אותה כאורך או כרוחב
 function DimMatch({ project, el, elements }: { project: Project; el: Element; elements: Element[] }) {

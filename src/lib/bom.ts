@@ -1,5 +1,5 @@
 import type { Element, Label, PriceItem, Project, Unit, Variant } from './types'
-import { MATERIAL_TEXT } from './types'
+import { LINES, MATERIALS, MATERIAL_TEXT, OBJECTS } from './garden'
 import { polyArea } from './geom'
 
 export const DISCLAIMER = 'הערכה בלבד עד לאישור מול מחירון מעודכן וספק.'
@@ -17,6 +17,29 @@ export type Category =
   | 'irrigation'
   | 'fence'
   | 'garden_wall'
+  | 'tiles'
+  | 'stone'
+  | 'concrete'
+  | 'turf'
+  | 'mulch'
+  | 'sand'
+  | 'water'
+  | 'trees'
+  | 'shrubs'
+  | 'planters'
+  | 'pergola'
+  | 'furniture'
+  | 'outdoor_kitchen'
+  | 'shed'
+  | 'play'
+  | 'water_feature'
+  | 'lighting'
+  | 'irrigation_point'
+  | 'hedge'
+  | 'edging'
+  | 'path'
+  | 'irrigation_line'
+  | 'lighting_line'
 
 export const CATEGORY_TEXT: Record<Category, string> = {
   earthwork: 'עבודות עפר וחפירה',
@@ -30,6 +53,29 @@ export const CATEGORY_TEXT: Record<Category, string> = {
   irrigation: 'השקיה',
   fence: 'גדר',
   garden_wall: 'קיר גינה',
+  tiles: 'אריחים',
+  stone: 'אבן טבעית',
+  concrete: 'בטון מוחלק',
+  turf: 'דשא סינתטי',
+  mulch: 'רסק עץ',
+  sand: 'חול',
+  water: 'משטח מים',
+  trees: 'עצים',
+  shrubs: 'שיחים ושתילה',
+  planters: 'אדניות',
+  pergola: 'פרגולה',
+  furniture: 'ריהוט גן',
+  outdoor_kitchen: 'מטבח חוץ',
+  shed: 'מחסן גינה',
+  play: 'מתקני משחק',
+  water_feature: 'מתקני מים',
+  lighting: 'גופי תאורה',
+  irrigation_point: 'נקודות מים',
+  hedge: 'גדר חיה',
+  edging: 'אבן שפה',
+  path: 'שבילים',
+  irrigation_line: 'קווי השקיה',
+  lighting_line: 'פסי תאורה',
 }
 
 export const CATEGORY_UNIT: Record<Category, Unit> = {
@@ -44,6 +90,29 @@ export const CATEGORY_UNIT: Record<Category, Unit> = {
   irrigation: 'm2',
   fence: 'm',
   garden_wall: 'm2',
+  tiles: 'm2',
+  stone: 'm2',
+  concrete: 'm2',
+  turf: 'm2',
+  mulch: 'm2',
+  sand: 'm2',
+  water: 'm2',
+  trees: 'unit',
+  shrubs: 'unit',
+  planters: 'unit',
+  pergola: 'm2',
+  furniture: 'unit',
+  outdoor_kitchen: 'm',
+  shed: 'unit',
+  play: 'unit',
+  water_feature: 'unit',
+  lighting: 'unit',
+  irrigation_point: 'unit',
+  hedge: 'm',
+  edging: 'm',
+  path: 'm2',
+  irrigation_line: 'm',
+  lighting_line: 'm',
 }
 
 export interface BomLine {
@@ -79,8 +148,16 @@ export function elementName(e: Element, idx?: number): string {
       return MATERIAL_TEXT[e.material] + n
     case 'fence':
       return (e.boundary ? 'גדר גבול מגרש' : 'גדר') + n
+    case 'object':
+      return OBJECTS[e.type].text + n
+    case 'line':
+      return LINES[e.type].text + n
+    case 'sketch':
+      return (e.closed ? 'שרטוט סגור' : 'קו חופשי') + n
   }
 }
+
+export const polyLength = (pts: { x: number; y: number }[]) => pts.reduce((s, p, i) => (i ? s + Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y) : 0), 0)
 
 export function numberedNames(elements: Element[]): Map<string, string> {
   const counters = new Map<string, number>()
@@ -99,10 +176,13 @@ function quantities(e: Element): { category: Category; qty: number; warning?: st
     const area = surfaceArea(e)
     switch (e.material) {
       case 'paving':
+      case 'tiles':
+      case 'stone':
+      case 'concrete':
         return [
           { category: 'earthwork', qty: area * 0.3 },
           { category: 'subbase', qty: area * 0.15 },
-          { category: 'paving', qty: area },
+          { category: MATERIALS[e.material].category, qty: area },
         ]
       case 'deck':
         return [
@@ -110,9 +190,17 @@ function quantities(e: Element): { category: Category; qty: number; warning?: st
           { category: 'deck', qty: area },
         ]
       case 'gravel':
+      case 'pebbles':
+      case 'sand':
+      case 'mulch':
         return [
           { category: 'earthwork', qty: area * 0.1 },
-          { category: 'gravel', qty: area },
+          { category: MATERIALS[e.material].category, qty: area },
+        ]
+      case 'turf':
+        return [
+          { category: 'subbase', qty: area * 0.08 },
+          { category: 'turf', qty: area },
         ]
       case 'lawn':
         return [
@@ -126,7 +214,24 @@ function quantities(e: Element): { category: Category; qty: number; warning?: st
           { category: 'irrigation', qty: area, warning: 'חיבור לקו מים ולחץ: דורש בעל מקצוע מוסמך' },
           { category: 'planting', qty: area },
         ]
+      case 'water':
+        return [
+          { category: 'earthwork', qty: area * 0.6 },
+          { category: 'water', qty: area, warning: 'מים, איטום ומשאבה: דורש בעל מקצוע מוסמך' },
+        ]
     }
+  }
+  if (e.kind === 'object') {
+    const def = OBJECTS[e.type]
+    const qty = CATEGORY_UNIT[def.category] === 'm2' ? e.w * e.d : CATEGORY_UNIT[def.category] === 'm' ? Math.max(e.w, e.d) : 1
+    return [{ category: def.category, qty, warning: def.note }]
+  }
+  if (e.kind === 'line') {
+    const def = LINES[e.type]
+    const L = polyLength(e.pts)
+    if (e.type === 'path') return [{ category: 'path', qty: L * e.width }]
+    if (e.type === 'low_wall') return [{ category: 'garden_wall', qty: L * e.height, warning: e.height > 1 ? 'קיר מעל מטר: דורש מהנדס מוסמך' : undefined }]
+    return [{ category: def.category, qty: L, warning: def.note }]
   }
   if (e.kind === 'fence') {
     return [{ category: 'fence', qty: len(e.x1, e.y1, e.x2, e.y2), warning: e.boundary ? 'גבול מגרש: לאימות במדידה' : undefined }]
@@ -217,10 +322,11 @@ export interface Phase {
 
 export const PHASES: Phase[] = [
   { order: 1, name: 'הכנת שטח ועבודות עפר', categories: ['earthwork', 'subbase'], reversible: false, note: 'מפלסים וניקוז לבית: דורש מהנדס מוסמך.' },
-  { order: 2, name: 'קירות גינה וגדרות', categories: ['garden_wall', 'fence'], reversible: false, note: 'קיר תומך או קיר מעל מטר: דורש מהנדס מוסמך.' },
-  { order: 3, name: 'תשתיות השקיה', categories: ['irrigation'], reversible: true, note: 'חיבור למים ולחץ, ותאורה וחשמל: דורש בעל מקצוע מוסמך.' },
-  { order: 4, name: 'ריצוף, דק וחצץ', categories: ['paving', 'deck', 'gravel'], reversible: false, note: '' },
-  { order: 5, name: 'אדמה, שתילה ודשא', categories: ['soil', 'planting', 'lawn'], reversible: true, note: '' },
+  { order: 2, name: 'קירות גינה, גדרות ומבנים', categories: ['garden_wall', 'fence', 'pergola', 'shed', 'outdoor_kitchen'], reversible: false, note: 'קיר תומך או קיר מעל מטר: דורש מהנדס מוסמך. מבני עזר: בדיקה מול הוועדה המקומית.' },
+  { order: 3, name: 'תשתיות: השקיה, מים וחשמל', categories: ['irrigation', 'irrigation_line', 'irrigation_point', 'lighting', 'lighting_line', 'water', 'water_feature'], reversible: true, note: 'חיבור למים ולחץ, ותאורה וחשמל: דורש בעל מקצוע וחשמלאי מוסמך.' },
+  { order: 4, name: 'ריצוף, דק, שבילים ומשטחים', categories: ['paving', 'tiles', 'stone', 'concrete', 'deck', 'gravel', 'sand', 'path', 'edging'], reversible: false, note: '' },
+  { order: 5, name: 'אדמה, שתילה ודשא', categories: ['soil', 'planting', 'lawn', 'turf', 'mulch', 'trees', 'shrubs', 'hedge', 'planters'], reversible: true, note: '' },
+  { order: 6, name: 'ריהוט ומתקנים', categories: ['furniture', 'play'], reversible: true, note: '' },
 ]
 
 export const fmtMoney = (n: number) => '₪' + Math.round(n).toLocaleString('he-IL')
