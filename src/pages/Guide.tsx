@@ -4,8 +4,9 @@ import { APPROACHES, RULES, STYLES } from '../data/gardenGuide'
 import { MATERIALS } from '../lib/garden'
 import { textureUrl } from '../lib/textures'
 import { PageIntro } from '../components/PageIntro'
-import { PromptBox } from '../components/CopyBox'
+import { PromptBox, StoredImage } from '../components/CopyBox'
 import { GLOSSARY } from '../data/glossary'
+import { RuleScene } from '../components/RuleScene'
 
 type Tab = 'styles' | 'approaches' | 'rules' | 'glossary'
 const TABS: { id: Tab; t: string }[] = [
@@ -23,6 +24,12 @@ export default function Guide() {
     if (open) document.getElementById(open)?.scrollIntoView({ block: 'start' })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const rulesCount = RULES.reduce((a, g) => a + g.rules.length, 0)
+  const [activeGroup, setActiveGroup] = useState(RULES[0].id)
+  const [activeRule, setActiveRule] = useState<number | null>(0)
+  const pickGroup = (id: string) => {
+    setActiveGroup(id)
+    setActiveRule(0)
+  }
 
   return (
     <div className="stack" style={{ gap: 18 }}>
@@ -57,6 +64,7 @@ export default function Guide() {
             const isOpen = open === s.id
             return (
               <article key={s.id} id={s.id} className={`card guide-card ${isOpen ? 'open' : ''}`}>
+                {!isOpen && <StoredImage storeKey={`style:${s.id}`} alt={`המחשה: ${s.name}`} />}
                 <div className="style-sw big">
                   {[s.plan.hard, s.plan.soft, s.plan.beds, ...(s.plan.accent ? [s.plan.accent] : [])].map((m) => (
                     <i key={m} style={{ backgroundImage: `url(${textureUrl(m, undefined, 96)})` }} title={MATERIALS[m].text} />
@@ -106,7 +114,7 @@ export default function Guide() {
                     <div className="notice">
                       <b>להיזהר:</b> {s.avoid}
                     </div>
-                    <PromptBox prompt={s.prompt} title={`פרומפט להמחשה: ${s.name}`} />
+                    <PromptBox prompt={s.prompt} title={`פרומפט להמחשה: ${s.name}`} imageKey={`style:${s.id}`} />
                     <div className="muted" style={{ fontSize: 13 }}>
                       לתכנון בסגנון הזה: פותחים פרויקט, לשונית <b>תכנון הגינה</b>, ובוחרים "{s.name}". <Link to="/projects">לפרויקטים</Link>
                     </div>
@@ -140,7 +148,7 @@ export default function Guide() {
                 </button>
                 {isOpen && (
                   <div style={{ marginTop: 10 }}>
-                    <PromptBox prompt={a.prompt} title={`פרומפט: ${a.name}`} />
+                    <PromptBox prompt={a.prompt} title={`פרומפט: ${a.name}`} imageKey={`approach:${a.id}`} />
                   </div>
                 )}
               </article>
@@ -166,30 +174,56 @@ export default function Guide() {
       )}
 
       {tab === 'rules' && (
-        <div className="stack" style={{ gap: 14 }} id="rules">
-          {RULES.map((g) => (
-            <section key={g.id} className="card">
-              <h3 className="h-section" style={{ margin: '0 0 8px' }}>
-                {g.title}
-              </h3>
-              <div className="rules">
-                {g.rules.map((r) => (
-                  <div key={r.rule} className={`rule ${r.why.includes('מוסמך') ? 'pro' : ''}`}>
-                    <div>
-                      <b>{r.rule}</b>
-                      {r.value && <span className="rule-val mono">{r.value}</span>}
-                    </div>
-                    <div className="muted" style={{ fontSize: 14 }}>
-                      {r.why}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-          <div className="muted" style={{ fontSize: 13 }}>
-            כללי אצבע לתכנון ראשוני בלבד. רגולציה, קירות תומכים, חשמל, גז ולחץ מים: דורש בעל מקצוע מוסמך.
+        <div className="rules-layout" id="rules">
+          <div className="stack" style={{ gap: 14 }}>
+            {RULES.map((g) => (
+              <section
+                key={g.id}
+                className={`card rule-group ${activeGroup === g.id ? 'on' : ''}`}
+                onMouseEnter={() => activeGroup !== g.id && pickGroup(g.id)}
+                data-group={g.id}
+              >
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <h3 className="h-section" style={{ margin: 0 }}>
+                    {g.title}
+                  </h3>
+                  <button type="button" className={`btn small ${activeGroup === g.id ? 'active' : ''}`} onClick={() => pickGroup(g.id)}>
+                    המחשה בתלת-ממד
+                  </button>
+                </div>
+                <div className="rules">
+                  {g.rules.map((r, i) => (
+                    <button
+                      type="button"
+                      key={r.rule}
+                      className={`rule ${r.why.includes('מוסמך') ? 'pro' : ''} ${activeGroup === g.id && activeRule === i ? 'on' : ''}`}
+                      onClick={() => {
+                        setActiveGroup(g.id)
+                        setActiveRule(i)
+                      }}
+                    >
+                      <span className="rule-head">
+                        <b>{r.rule}</b>
+                        {r.value && <span className="rule-val">{r.value}</span>}
+                      </span>
+                      <span className="muted" style={{ fontSize: 14 }}>
+                        {r.why}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+            <div className="muted" style={{ fontSize: 13 }}>
+              כללי אצבע לתכנון ראשוני בלבד. רגולציה, קירות תומכים, חשמל, גז ולחץ מים: דורש בעל מקצוע מוסמך.
+            </div>
           </div>
+          <aside className="rules-scene-side">
+            <RuleScene groupId={activeGroup} highlight={activeRule} />
+            <div className="muted" style={{ fontSize: 13 }}>
+              לוחצים על כלל ברשימה כדי להדגיש את <b>הפרמטר והערך</b> שלו בהמחשה.
+            </div>
+          </aside>
         </div>
       )}
     </div>

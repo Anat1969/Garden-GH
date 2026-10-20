@@ -889,17 +889,31 @@ export default function PlanTab() {
               }}
             >
               <input
-                autoFocus
+                ref={(el) => {
+                  if (el && document.activeElement !== el && !el.dataset.f) {
+                    el.dataset.f = '1'
+                    setTimeout(() => {
+                      el.focus()
+                      el.select()
+                    }, 0)
+                  }
+                }}
                 className="input num"
                 type="number"
                 step="0.01"
                 inputMode="decimal"
                 value={dimEdit.value}
                 onChange={(e) => setDimEdit({ ...dimEdit, value: e.target.value })}
-                onBlur={applyDim}
+                onKeyDown={(e) => e.key === 'Escape' && setDimEdit(null)}
                 aria-label="מידה חדשה במטרים"
               />
               <span>מ'</span>
+              <button type="submit" className="btn small primary">
+                החלה
+              </button>
+              <button type="button" className="btn small ghost" onClick={() => setDimEdit(null)}>
+                ביטול
+              </button>
             </form>
           )}
         </div>
@@ -1015,7 +1029,12 @@ function SelDims({ e, k, onEdit }: { e: Element; k: number; onEdit: (id: string,
     <g
       key={key}
       className="dim-tag"
+      // לחיצה פותחת תיבת הקלדה. מונעים את פעולת ברירת המחדל כדי שהתיבה לא תאבד פוקוס מיד
       onPointerDown={(ev) => {
+        ev.stopPropagation()
+        ev.preventDefault()
+      }}
+      onClick={(ev) => {
         ev.stopPropagation()
         onClick()
       }}

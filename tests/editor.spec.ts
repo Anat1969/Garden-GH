@@ -42,7 +42,9 @@ test('עורך: הצמדה ואיחוד חומר, מחיקה וביטול, מי�
   const tags = page.getByTestId('sel-dim')
   await expect(tags.first()).toBeVisible()
   await expect(tags.first()).toHaveText(/^\d+\.\d{2}$/)
-  await tags.first().dispatchEvent('pointerdown')
+  await tags.first().click()
+  await page.waitForTimeout(200)
+  await expect(page.getByLabel('מידה חדשה במטרים')).toBeFocused()
   await page.getByLabel('מידה חדשה במטרים').fill('6.5')
   await page.getByLabel('מידה חדשה במטרים').press('Enter')
   await expect(page.getByTestId('sel-dims')).toContainText('6.50')
@@ -108,9 +110,23 @@ test('עורך: הצמדה ואיחוד חומר, מחיקה וביטול, מי�
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await page.getByRole('button', { name: 'העתקת הפרומפט' }).first().click()
   await expect(page.getByText('הפרומפט הועתק')).toBeVisible()
+  // מסגרת תמונה ליד הפרומפט: העלאה
+  await page.getByTestId('image-input').first().setInputFiles('public/icon-192.png')
+  await expect(page.getByTestId('image-frame').first().locator('img')).toBeVisible()
+  await page.screenshot({ path: 'shots/45b-guide-image.png' })
   await page.getByRole('tab', { name: 'גישות תכנון' }).click()
   await page.getByRole('tab', { name: 'תובנות וכללי אצבע' }).click()
   await expect(page.locator('.rule').first()).toBeVisible()
+  // המחשה תלת-ממדית לכל קטגוריה, והדגשת הכלל שנבחר
+  await expect(page.getByTestId('rule-scene').locator('canvas')).toBeVisible()
+  await page.locator('.rule-group').nth(1).getByRole('button', { name: 'המחשה בתלת-ממד' }).click()
+  await page.locator('.rule-group').nth(1).locator('button.rule').first().click()
+  await expect(page.locator('.rule-group').nth(1).locator('button.rule.on')).toHaveCount(1)
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: 'shots/46-rules-3d.png' })
+  // חזרה לדף הקודם
+  await page.getByRole('button', { name: 'חזרה לדף הקודם' }).click()
+  await expect(page).not.toHaveURL(/\/guide/)
   await page.screenshot({ path: 'shots/45-guide.png', fullPage: true })
 
   // נייד: בלי גלילה אופקית בתכנון ובמדריך
