@@ -89,9 +89,10 @@ export function TopBar() {
 
   return (
     <header className="topbar">
-      <Link to="/" className="brand" aria-label="Garden-GH, לדף הבית">
+      <Link to="/" className="brand" aria-label="תכנון גינה, לדף הבית">
+        <img className="brand-icon" src="/icon.svg" alt="" width={36} height={36} />
         <span className="brand-name">
-          <b>Garden</b>-GH
+          <b>תכנון גינה</b>
         </span>
       </Link>
       <span className={`cloud-chip no-print ${userEmail && cloud === 'synced' ? 'synced' : ''} ${cloud === 'error' ? 'error' : ''}`}>{cloudText}</span>

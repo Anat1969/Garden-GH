@@ -11,8 +11,9 @@ import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../li
 import { NO_BASIS, numberedNames, fmtNum, polyLength, surfaceArea } from '../lib/bom'
 import { LABEL_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
-import { boundsOf, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
+import { boundsOf, handlePoints, setVertex, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
 import { IconBtn } from '../components/EditIcons'
+import { PLAN_FINISH, useFinish, type PlanFinish } from '../lib/finish'
 import { PageIntro } from '../components/PageIntro'
 import { textureUrl } from '../lib/textures'
 import { ElementEditor, approvedLabel } from '../components/ElementEditor'
@@ -80,6 +81,10 @@ export default function PlanTab() {
   const [group, setGroup] = useState<Group>(GROUP_OF[tool] ?? (tool === 'object' && item ? (OBJECTS[item as ObjectType]?.group ?? 'plants') : 'tools'))
   const [showDims, setShowDims] = useState(false)
   const [snapOn, setSnapOn] = useState(true)
+  const [finish, setFinish] = useFinish<PlanFinish>('plan', 'texture')
+  // גרירת ידית: קודקוד משטח או קו, קצה קיר, או פינת שינוי גודל של פריט
+  const [vdrag, setVdrag] = useState<{ el: Element; idx: number; p: Pt } | null>(null)
+  const clip = useRef<Element | null>(null)
   const [snapHit, setSnapHit] = useState<Pt | null>(null)
   // עריכת מידה ישירות על התוכנית: תיבת קלט מעל תווית המידה
   const [dimEdit, setDimEdit] = useState<{ id: string; part: number | 'w' | 'd' | 'len'; value: string; sx: number; sy: number } | null>(null)
@@ -389,6 +394,12 @@ export default function PlanTab() {
       if (Math.hypot(w.x - last.x, w.y - last.y) > view.w / 500) setStrokePts([...stroke, w])
       return
     }
+    if (vdrag) {
+      const hit = snapOn ? snapTo(w, snapSet(variant.elements, vdrag.el.id), view.w / 70) : null
+      setSnapHit(hit ? hit.p : null)
+      setVdrag({ ...vdrag, p: hit ? hit.p : { x: snap(w.x), y: snap(w.y) } })
+      return
+    }
     if (moving) {
       const raw = { dx: w.x - moving.start.x, dy: w.y - moving.start.y }
       if (snapOn) {
@@ -414,6 +425,13 @@ export default function PlanTab() {
       const pts = stroke
       setStrokePts(null)
       finishStroke(pts)
+      return
+    }
+    if (vdrag) {
+      const changed = setVertex(vdrag.el, vdrag.idx, vdrag.p)
+      upsertElement(project.id, { ...changed, label: 'assumed', source: changed.source.includes('נערך בגרירה') ? changed.source : `${changed.source} · נערך בגרירה` } as Element)
+      setVdrag(null)
+      setSnapHit(null)
       return
     }
     if (moving) {
@@ -460,6 +478,26 @@ export default function PlanTab() {
         e.preventDefault()
         deleteSelected()
       }
+      // חיצים מזיזים את הנבחר: 5 ס"מ, ועם Shift 50 ס"מ
+      const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+      if (arrows[e.key] && selected && selected.kind !== 'opening') {
+        e.preventDefault()
+        const st = e.shiftKey ? 0.5 : 0.05
+        upsertElement(project.id, moveElement(selected, arrows[e.key][0] * st, arrows[e.key][1] * st), true)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selected) {
+        e.preventDefault()
+        duplicateSelected()
+      }
+      if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'r' && selected) rotateSelected()
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selected) clip.current = selected
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip.current && clip.current.kind !== 'opening') {
+        e.preventDefault()
+        const copy = { ...moveElement(clip.current, 1, 1), id: uid(), approved: false, label: 'assumed' as const } as Element
+        clip.current = copy
+        upsertElement(project.id, copy)
+        select(copy.id)
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (e.shiftKey) redo(project.id)
@@ -474,6 +512,24 @@ export default function PlanTab() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // מרכוז התצוגה על אלמנט (בחירה מהרשימה או מהמודל)
+  const focusOn = (el: Element) => {
+    const b = boundsOf([el])
+    if (!b) return
+    const size = Math.max(8, (b.maxX - b.minX) * 3, (b.maxY - b.minY) * 3)
+    const r = svgRef.current?.getBoundingClientRect()
+    const ar = r && r.height ? r.width / r.height : 1.5
+    setView({ x: (b.minX + b.maxX) / 2 - (size * ar) / 2, y: (b.minY + b.maxY) / 2 - size / 2, w: size * ar, h: size })
+  }
+  const focusParam = params.get('focus')
+  useEffect(() => {
+    if (focusParam && selected) {
+      focusOn(selected)
+      const p = new URLSearchParams(params)
+      p.delete('focus')
+      setParams(p, { replace: true })
+    }
+  }, [focusParam]) // eslint-disable-line react-hooks/exhaustive-deps
   const deleteSelected = () => {
     if (!selected) return
     removeElement(project.id, selected.id)
@@ -591,7 +647,7 @@ export default function PlanTab() {
     .slice(0, 8)
   const pendingCount = variant.elements.filter((e) => !e.approved && (e.kind === 'wall' || e.kind === 'opening')).length
   const k = view.w / 900
-  const shown = variant.elements.map((e) => (moving && moving.el.id === e.id ? moveElement(e, moving.dx, moving.dy) : e))
+  const shown = variant.elements.map((e) => (moving && moving.el.id === e.id ? moveElement(e, moving.dx, moving.dy) : vdrag && vdrag.el.id === e.id ? setVertex(e, vdrag.idx, vdrag.p) : e))
   // טקסטורות בשימוש בתוכנית ובטיוטה
   const usedPatterns = new Map<string, { m: SurfaceMaterial; c?: string }>()
   for (const e of shown) if (e.kind === 'surface') usedPatterns.set(patternId(e.material, e.color), { m: e.material, c: e.color })
@@ -625,11 +681,13 @@ export default function PlanTab() {
         art="plan"
         compact
         title="כאן מתכננים: כל קו הוא כמות, וכל כמות היא עלות"
-        why={
-          <>
-            בוחרים כלי או פריט ב<b>ספריית הגינה</b> ומשרטטים על גבי ההיתר במטרים. <b>הצמדה</b> מחברת לקודקודים ולצלעות, ומשטחים נוגעים <b>מאותו חומר מתאחדים</b>. לוחצים על אלמנט כדי <b>לערוך, לשכפל, לסובב או למחוק</b>, ועל מידה כדי להקליד מידה חדשה. ביטול: Ctrl+Z.
-          </>
-        }
+        points={[
+          <>בוחרים כלי או פריט ב<b>ספריית הגינה</b>, ומשרטטים במטרים על גבי ההיתר.</>,
+          <><b>עכבר:</b> גרירה מזיזה, ידיות בפינות משנות צורה, גלגלת מקרבת.</>,
+          <><b>מקלדת:</b> חיצים מזיזים, Delete מוחק, Ctrl+D משכפל, R מסובב, Ctrl+Z מבטל.</>,
+          <>לחיצה על <b>מידה</b> של האלמנט הנבחר פותחת הקלדה של מידה חדשה.</>,
+        ]}
+        legend
         insights={[
           { k: 'אלמנטים', v: variant.elements.length },
           { k: 'משטחים', v: surfacesCount },
@@ -687,6 +745,13 @@ export default function PlanTab() {
             </span>
             <IconBtn icon="snap" label="הצמדה" pressed={snapOn} onClick={() => setSnapOn((v) => !v)} />
             <IconBtn icon="dims" label="הצגת מידות" pressed={showDims} onClick={() => setShowDims((v) => !v)} />
+            <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
+              {PLAN_FINISH.map((f) => (
+                <button key={f.id} type="button" role="radio" aria-checked={finish === f.id} className={`btn small ${finish === f.id ? 'active' : ''}`} onClick={() => setFinish(f.id)} title={f.d}>
+                  {f.t}
+                </button>
+              ))}
+            </span>
           </div>
           {selected && hasBasis && tool === 'select' && (
             <div className="selbar" role="toolbar" aria-label="פעולות על האלמנט הנבחר">
@@ -742,7 +807,7 @@ export default function PlanTab() {
                     startMove(e, ev)
                   }
                   const common = { onPointerDown: onDown, style: { cursor: tool === 'select' ? 'move' : undefined } as React.CSSProperties }
-                  return <PlanShape key={e.id} e={e} sel={sel} k={k} walls={walls} common={common} />
+                  return <PlanShape key={e.id} e={e} sel={sel} k={k} walls={walls} common={common} finish={finish} />
                 })}
             {pending && hover && (tool === 'rect' ? (
               <rect x={Math.min(pending.x, hover.x)} y={Math.min(pending.y, hover.y)} width={Math.abs(hover.x - pending.x)} height={Math.abs(hover.y - pending.y)} fill={`url(#${patternId(material, color ?? undefined)})`} fillOpacity={0.7} stroke="#2f5d4a" strokeWidth={k} />
@@ -751,6 +816,27 @@ export default function PlanTab() {
             ))}
             {hasBasis && showDims && <PlanDims elements={shown.filter((e) => e.id !== selId)} k={k} />}
             {hasBasis && selected && <SelDims e={shown.find((x) => x.id === selected.id) ?? selected} k={k} onEdit={openDimEdit} />}
+            {hasBasis && selected && tool === 'select' && !moving &&
+              handlePoints(shown.find((x) => x.id === selected.id) ?? selected).map((h, i) => (
+                <rect
+                  key={i}
+                  className="handle"
+                  data-testid="handle"
+                  x={h.x - k * 4.5}
+                  y={h.y - k * 4.5}
+                  width={k * 9}
+                  height={k * 9}
+                  fill="#fff"
+                  stroke="#2f5d4a"
+                  strokeWidth={k * 1.8}
+                  onPointerDown={(ev) => {
+                    ev.stopPropagation()
+                    drag.current = null
+                    svgRef.current?.setPointerCapture?.(ev.pointerId)
+                    setVdrag({ el: selected, idx: i, p: h })
+                  }}
+                />
+              ))}
             {snapHit && <circle cx={snapHit.x} cy={snapHit.y} r={k * 6} fill="none" stroke="#c0392b" strokeWidth={k * 1.6} />}
             {pending && <circle cx={pending.x} cy={pending.y} r={k * 5} fill="#2f5d4a" />}
             {polyPts.length > 0 && (
@@ -900,6 +986,7 @@ export default function PlanTab() {
                     className={`el-item ${e.id === selId ? 'sel' : ''}`}
                     onClick={() => {
                       select(e.id)
+                      focusOn(e)
                       if (tool !== 'select') setTool('select')
                     }}
                   >
@@ -991,11 +1078,12 @@ function SelDims({ e, k, onEdit }: { e: Element; k: number; onEdit: (id: string,
 // סדר ציור: משטחים מתחת, אחריהם קווים, קירות ופריטים, ושרטוט חופשי מעל
 const order = (e: Element) => (e.kind === 'surface' ? 0 : e.kind === 'line' ? 1 : e.kind === 'fence' || e.kind === 'wall' ? 2 : e.kind === 'opening' ? 3 : e.kind === 'object' ? 4 : 5)
 
-function PlanShape({ e, sel, k, walls, common }: { e: Element; sel: boolean; k: number; walls: Wall[]; common: { onPointerDown: (ev: React.PointerEvent) => void; style: React.CSSProperties } }) {
+function PlanShape({ e, sel, k, walls, common, finish }: { e: Element; sel: boolean; k: number; walls: Wall[]; common: { onPointerDown: (ev: React.PointerEvent) => void; style: React.CSSProperties }; finish: PlanFinish }) {
   const selStroke = '#1d2120'
+  const line = finish === 'line'
   switch (e.kind) {
     case 'surface': {
-      const fill = `url(#${patternId(e.material, e.color)})`
+      const fill = line ? '#ffffff' : finish === 'color' ? e.color || MATERIALS[e.material].color : `url(#${patternId(e.material, e.color)})`
       return e.poly ? (
         <polygon points={e.poly.map((v) => `${v.x},${v.y}`).join(' ')} fill={fill} fillOpacity={0.85} stroke={sel ? selStroke : '#6d6a60'} strokeWidth={k * (sel ? 3 : 1)} {...common} />
       ) : (
@@ -1019,7 +1107,7 @@ function PlanShape({ e, sel, k, walls, common }: { e: Element; sel: boolean; k: 
     }
     case 'object': {
       const def = OBJECTS[e.type]
-      const c = e.color ?? def.color
+      const c = line ? '#1d2120' : e.color ?? def.color
       return (
         <g transform={`translate(${e.x} ${e.y}) rotate(${e.rot})`} {...common}>
           {def.round ? (
@@ -1035,7 +1123,7 @@ function PlanShape({ e, sel, k, walls, common }: { e: Element; sel: boolean; k: 
     }
     case 'line': {
       const def = LINES[e.type]
-      const c = e.color ?? def.color
+      const c = line ? '#6d706d' : e.color ?? def.color
       const pts = e.pts.map((p) => `${p.x},${p.y}`).join(' ')
       const w = Math.max(e.width, k * 2)
       const dash = e.type === 'irrigation' ? `${k * 6} ${k * 4}` : e.type === 'light_strip' ? `${k * 2} ${k * 5}` : undefined

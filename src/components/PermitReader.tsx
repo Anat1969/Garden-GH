@@ -1,16 +1,18 @@
 import { DataTable } from './DataTable'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { Building, Drawing, DrawingKind, Permit, Project } from '../lib/types'
 import { DRAWING_KIND_TEXT } from '../lib/types'
 import { mapPage, pickGardenDrawing, readHeights, readStructure, renderRegion } from '../lib/permitReader'
-import { structureToElements, STRUCT_SRC, baseAbs } from '../lib/structureToElements'
+import { structureToElements, STRUCT_SRC, baseAbs, isAutoHouse, replaceAuto } from '../lib/structureToElements'
 import { PT_TO_M_AT_1 } from '../lib/pdf'
+import { polyArea } from '../lib/geom'
 import { aiAvailable, readPageWithAi } from '../lib/aiRead'
 import { attachLines, mergeDims } from '../lib/dims'
 import { getState, setPlanScale, uid, updateProject, updateVariant } from '../lib/store'
-import { Loading, NumField, Tag, toast } from './ui'
+import { Loading, Modal, NumField, Tag, toast } from './ui'
+import { IconBtn } from './EditIcons'
 
 const MEANING_TEXT: Record<string, string> = {
   ground_floor: 'רצפת קומת קרקע',
@@ -37,6 +39,8 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
   const [log, setLog] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [thumbs, setThumbs] = useState<Record<string, string>>({})
+  const [result, setResult] = useState<{ title: string; lines: string[] } | null>(null)
+  const logRef = useRef<string[]>([])
   const drawings = permit.drawings ?? []
   const work = drawings.find((d) => d.id === permit.workDrawingId)
 
@@ -57,7 +61,10 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
   }, [doc, drawings.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setPermit = (fn: (p: Permit) => Permit) => updateProject(project.id, (p) => (p.permit ? { ...p, permit: fn(p.permit) } : p))
-  const note = (m: string) => setLog((l) => [...l, m])
+  const note = (m: string) => {
+    logRef.current.push(m)
+    setLog((l) => [...l, m])
+  }
   const latest = () => getState().projects.find((p) => p.id === project.id)!
 
   const useDrawing = (d: Drawing) => {
@@ -85,7 +92,14 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     setBusy(`קוראת מבנה וגינה: ${d.title || 'תוכנית'}`)
     const s = await readStructure(doc, d)
     setPermit((p) => ({ ...p, structure: s }))
-    updateProject(project.id, (p) => ({ ...p, north: Math.round(s.northDeg) }))
+    const mpp = latest().permit?.scale.metersPerPt
+    const area = mpp && s.plot.length >= 3 ? Math.abs(polyArea(s.plot)) * mpp * mpp : null
+    updateProject(project.id, (p) => ({
+      ...p,
+      north: Math.round(s.northDeg),
+      plotArea: area ? Math.round(area * 100) / 100 : p.plotArea,
+      extracted: { ...p.extracted, north: 'מחץ הצפון בתוכנית', ...(area ? { plotArea: 'מגבול המגרש בתוכנית' } : {}) },
+    }))
     note(`נקראו ${s.units.length} יחידות, ${s.openings.length} פתחים, ${s.zones.length} אזורי גינה, ${s.levels.length} מפלסים, ${s.trees.length} עצים`)
   }
 
@@ -97,7 +111,18 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     }
     const r = await readHeights(doc, targets, setBusy)
     if (r.building) {
-      updateProject(project.id, (p) => ({ ...p, building: r.building! }))
+      const bl = r.building
+      const summary = bl.levels
+        .slice(0, 6)
+        .map((l) => `${l.text} ${MEANING_TEXT[l.meaning] ?? ''}`.trim())
+        .join(' · ')
+      updateProject(project.id, (p) => ({
+        ...p,
+        building: bl,
+        baseLevel: bl.baseAbs ?? p.baseLevel,
+        levelsNote: summary || p.levelsNote,
+        extracted: { ...p.extracted, ...(bl.baseAbs !== null ? { baseLevel: 'מהחתכים והחזיתות' } : {}), ...(summary ? { levelsNote: 'מסימוני הגובה בהיתר' } : {}) },
+      }))
       note(`נקראו ${r.building.levels.length} סימוני גובה מ-${targets.length} שרטוטים`)
     }
     if (r.errors.length) note(r.errors[0])
@@ -121,19 +146,20 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       note('אין קנה מידה או קריאת מבנה, לא נבנו אלמנטים')
       return 0
     }
-    updateVariant(project.id, (v) => {
-      const keep = v.elements.filter((e) => !e.source.startsWith(STRUCT_SRC))
-      const keepIds = new Set(keep.map((e) => e.id))
-      return { ...v, elements: [...keep.filter((e) => e.kind !== 'opening' || keepIds.has(e.wallId)), ...els] }
-    })
-    note(`נבנו ${els.length} אלמנטים בחלופה הפעילה, כולם "מוערך" עד אישור`)
+    const replaced = p.variants.find((v) => v.id === p.activeVariantId)!.elements.filter((e) => isAutoHouse(e) || e.source.startsWith(STRUCT_SRC)).length
+    updateVariant(project.id, (v) => ({ ...v, elements: replaceAuto(v.elements, els, true) }))
+    note(`נבנו ${els.length} אלמנטים בחלופה הפעילה${replaced ? `, במקום ${replaced} שנבנו קודם` : ''}. כולם "מוערך" עד אישור`)
     return els.length
   }
 
-  const run = async (fn: () => Promise<void>) => {
+  // כל פעולה מסתיימת בהודעה ובחלון שמראה מה יצא
+  const run = async (fn: () => Promise<void>, title = 'הפעולה הסתיימה') => {
     setError(null)
+    logRef.current = []
     try {
       await fn()
+      toast(title)
+      setResult({ title, lines: logRef.current.length ? [...logRef.current] : ['הפעולה הסתיימה בלי שינויים'] })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -154,8 +180,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       await doDims(g)
       if (!latest().permit?.scale.metersPerPt) note('אין עדיין קנה מידה. קובעים אותו במסך המידות, ואז בונים את המודל.')
       else buildElements()
-      toast('קריאת ההיתר הסתיימה')
-    })
+    }, 'קריאת ההיתר הסתיימה')
 
   const b = project.building
   const base = baseAbs(project)
@@ -163,24 +188,84 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
 
   return (
     <div className="card" data-testid="permit-reader">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <div>
-          <div className="eyebrow">שרטט ואדריכל נוף</div>
-          <div className="h-section">קריאת ההיתר</div>
-          <div className="muted" style={{ fontSize: 14, maxWidth: '64ch' }}>
-            ממפה את הגיליון לשרטוטים, קורא מתוכנית קומת הקרקע את הבית, הפתחים, גבול המגרש ואזורי הגינה, קורא מהחתכים והחזיתות את הקומות והגג, ובונה מזה
-            מודל. הכול מסומן "מוערך" עד שמאשרים.
-          </div>
+      <div className="eyebrow">שרטט ואדריכל נוף</div>
+      <div className="h-section">קריאת ההיתר</div>
+      <div className="muted" style={{ fontSize: 14 }}>בוחרים פעולה לפי מה שצריך. בפעם הראשונה: קריאה מלאה.</div>
+      <div className="reader-actions">
+        <div className="reader-action main">
+          <IconBtn icon="scan" label="קריאה מלאה של ההיתר" className="primary" disabled={!aiAvailable || !!busy} onClick={fullRead} />
+          <ol>
+            <li>
+              <b>מתי:</b> בפעם הראשונה, או אחרי העלאת היתר חדש.
+            </li>
+            <li>
+              <b>מה קורה:</b> כל הפעולות למטה ברצף: מיפוי, מבנה, גבהים, מידות ובנייה.
+            </li>
+            <li>
+              <b>זמן:</b> דקה עד שלוש.
+            </li>
+          </ol>
         </div>
-        <div className="row">
-          <button className="btn primary" disabled={!aiAvailable || !!busy} onClick={fullRead}>
-            קריאה מלאה של ההיתר
-          </button>
-          <button className="btn" disabled={!aiAvailable || !!busy} onClick={() => run(async () => void (await doMap()))}>
-            מיפוי הגיליון
-          </button>
+        <div className="reader-action">
+          <IconBtn icon="layers" label="מיפוי הגיליון" disabled={!aiAvailable || !!busy} onClick={() => run(async () => void (await doMap()), 'מיפוי הגיליון הסתיים')} />
+          <ol>
+            <li>מחלק את הגיליון לשרטוטים נפרדים: תוכניות, חזיתות, חתכים, תשריט.</li>
+            <li>מזהה כותרת וקנה מידה לכל שרטוט, ומשם בוחרים את <b>שרטוט העבודה</b>.</li>
+            <li>לא משנה את התוכנית או את המודל.</li>
+          </ol>
         </div>
+        {work && (
+          <>
+            <div className="reader-action">
+              <IconBtn icon="plan" label="קריאת מבנה וגינה" disabled={!!busy} onClick={() => run(() => doStructure(work), 'קריאת המבנה הסתיימה')} />
+              <ol>
+                <li>קוראת משרטוט העבודה את <b>קו הבית, הפתחים, גבול המגרש, אזורי הגינה, העצים והמפלסים</b>.</li>
+                <li>ממלאת את כיוון הצפון ושטח המגרש בפרטי הפרויקט.</li>
+                <li>לא בונה אלמנטים. בשביל זה: בנייה מחדש.</li>
+              </ol>
+            </div>
+            <div className="reader-action">
+              <IconBtn icon="heights" label="קריאת גבהים" disabled={!!busy} onClick={() => run(() => doHeights(drawings), 'קריאת הגבהים הסתיימה')} />
+              <ol>
+                <li>קוראת מהחתכים והחזיתות את <b>±0.00, גובה הקומות והגג</b>.</li>
+                <li>משפיעה על הגובה במודל ועל המפלסים בפרטי הפרויקט.</li>
+              </ol>
+            </div>
+            <div className="reader-action">
+              <IconBtn icon="build" label="בנייה מחדש של האלמנטים" disabled={!!busy || !s} onClick={() => run(async () => void buildElements(), 'הבנייה מחדש הסתיימה')} />
+              <ol>
+                <li>בונה את הבית, הפתחים, גבול המגרש ואזורי הגינה מהקריאה האחרונה.</li>
+                <li>
+                  <b>מחליפה</b> את מה שנבנה אוטומטית קודם, כך שאין בית על בית.
+                </li>
+                <li>מה ששרטטת בעצמך נשאר.</li>
+              </ol>
+            </div>
+          </>
+        )}
       </div>
+      {result && (
+        <Modal
+          title={result.title}
+          onClose={() => setResult(null)}
+          actions={
+            <>
+              <Link className="btn primary" to="../plan">
+                לתוכנית
+              </Link>
+              <Link className="btn" to="../model">
+                למודל
+              </Link>
+            </>
+          }
+        >
+          <ol className="steps-list" data-testid="reader-result">
+            {result.lines.map((l, i) => (
+              <li key={i}>{l}</li>
+            ))}
+          </ol>
+        </Modal>
+      )}
 
       {busy && <Loading text={busy} />}
       {error && (
@@ -236,22 +321,11 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
               </div>
             ))}
           </div>
-          {work && (
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" disabled={!!busy} onClick={() => run(() => doStructure(work))}>
-                קריאת מבנה וגינה מהשרטוט
-              </button>
-              <button className="btn" disabled={!!busy} onClick={() => run(() => doHeights(drawings))}>
-                קריאת גבהים מחתכים וחזיתות
-              </button>
-              <button className="btn" disabled={!!busy || !s} onClick={() => run(async () => void buildElements())}>
-                בנייה מחדש של האלמנטים
-              </button>
-              <Link className="btn ghost" to="../dims">
-                מידות השרטוט
-              </Link>
-            </div>
-          )}
+          <div className="row" style={{ marginTop: 12 }}>
+            <Link className="btn ghost" to="../dims">
+              מידות השרטוט
+            </Link>
+          </div>
         </div>
       )}
 

@@ -12,6 +12,13 @@ export const LABEL_TEXT: Record<Label, string> = {
   assumed: 'הונח',
 }
 
+// הסבר לכל תווית, מוצג במעבר עכבר או בלחיצה על התווית
+export const LABEL_HELP: Record<Label, string> = {
+  measured: 'מדוד מהיתר: המספר נקרא ממידה שכתובה בהיתר, או אושר מולה. זה הנתון הכי אמין.',
+  estimated: 'מוערך: האפליקציה חישבה את המספר מהשרטוט (קנה מידה, זיהוי אוטומטי). עוד לא אומת מול מידה כתובה, צריך לבדוק.',
+  assumed: 'הונח: ערך ברירת מחדל או ערך שהוקלד ידנית, בלי מדידה. מתאים להערכה ראשונית בלבד.',
+}
+
 export type PageKind = 'plan' | 'elevation' | 'section' | 'site' | 'other'
 
 export const PAGE_KIND_TEXT: Record<PageKind, string> = {
@@ -318,6 +325,10 @@ export interface Project {
   levelsNote: string
   permit: Permit | null
   documents?: ProjectDoc[]
+  plotArea?: number // שטח המגרש במ"ר
+  baseLevel?: number // המפלס המוחלט של ±0.00
+  // שדות שמולאו מקריאת ההיתר: שם השדה ומאיפה חולץ. עריכה ידנית מסירה את הסימון
+  extracted?: Partial<Record<'north' | 'levelsNote' | 'plotArea' | 'baseLevel', string>>
   building?: Building
   variants: Variant[]
   activeVariantId: string

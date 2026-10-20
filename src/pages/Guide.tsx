@@ -5,17 +5,19 @@ import { MATERIALS } from '../lib/garden'
 import { textureUrl } from '../lib/textures'
 import { PageIntro } from '../components/PageIntro'
 import { PromptBox } from '../components/CopyBox'
+import { GLOSSARY } from '../data/glossary'
 
-type Tab = 'styles' | 'approaches' | 'rules'
+type Tab = 'styles' | 'approaches' | 'rules' | 'glossary'
 const TABS: { id: Tab; t: string }[] = [
   { id: 'styles', t: 'סגנונות גינה' },
   { id: 'approaches', t: 'גישות תכנון' },
   { id: 'rules', t: 'תובנות וכללי אצבע' },
+  { id: 'glossary', t: 'מילון מונחים' },
 ]
 
 export default function Guide() {
   const loc = useLocation()
-  const [tab, setTab] = useState<Tab>(loc.hash.startsWith('#rules') ? 'rules' : loc.hash.startsWith('#approach') ? 'approaches' : 'styles')
+  const [tab, setTab] = useState<Tab>(loc.hash.startsWith('#rules') ? 'rules' : loc.hash.startsWith('#glossary') ? 'glossary' : loc.hash.startsWith('#approach') ? 'approaches' : 'styles')
   const [open, setOpen] = useState<string | null>(loc.hash.replace('#', '') || null)
   useEffect(() => {
     if (open) document.getElementById(open)?.scrollIntoView({ block: 'start' })
@@ -28,11 +30,12 @@ export default function Guide() {
       <PageIntro
         art="guide"
         title="סגנון, גישה וכללי אצבע, לפני שמשרטטים"
-        why={
-          <>
-            המדריך עוזר <b>לבחור כיוון עם הלקוח</b> ולהסביר אותו: לכל סגנון יש עקרונות, צמחים מתאימים לאקלים בישראל, חומרים, מתי לבחור בו ומתי לא, ו<b>פרומפט להמחשה</b> מוכן להדבקה. <b>כללי האצבע</b> נותנים מספרים לתכנון: רוחב שביל, גודל פינת אוכל, שיפועים ומרחקים. אותם סגנונות משמשים את <b>התכנון האוטומטי</b> בכל פרויקט.
-          </>
-        }
+        points={[
+          <><b>סגנונות:</b> עקרונות, צמחים לאקלים בישראל, חומרים, ופרומפט להמחשה.</>,
+          <><b>כללי אצבע:</b> מספרים לתכנון, כמו רוחב שביל, גודל פינת אוכל ושיפועים.</>,
+          <><b>מילון מונחים:</b> מה פירוש כל מילה באפליקציה.</>,
+          <>אותם סגנונות משמשים את <b>התכנון האוטומטי</b> בכל פרויקט.</>,
+        ]}
         insights={[
           { k: 'סגנונות', v: STYLES.length },
           { k: 'גישות', v: APPROACHES.length },
@@ -144,6 +147,22 @@ export default function Guide() {
             )
           })}
         </div>
+      )}
+
+      {tab === 'glossary' && (
+        <section className="card" id="glossary">
+          <h3 className="h-section" style={{ margin: '0 0 8px' }}>
+            מילון מונחים
+          </h3>
+          <dl className="glossary">
+            {GLOSSARY.map((g) => (
+              <div key={g.term}>
+                <dt>{g.term}</dt>
+                <dd>{g.meaning}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       )}
 
       {tab === 'rules' && (

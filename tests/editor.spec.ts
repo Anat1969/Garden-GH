@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 async function at(page: Page, fx: number, fy: number) {
+  await page.getByTestId('plan-canvas').scrollIntoViewIfNeeded()
   const box = (await page.getByTestId('plan-canvas').boundingBox())!
   return { x: box.x + box.width * fx, y: box.y + box.height * fy }
 }

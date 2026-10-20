@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { createProject, useApp } from '../lib/store'
+import { useApp } from '../lib/store'
 import { Rise, Tag } from '../components/ui'
 import { RouteDemo } from '../components/RouteDemo'
 import { PlanThumb } from '../components/PlanThumb'
@@ -66,10 +66,8 @@ export default function Home() {
   const nav = useNavigate()
   const recent = projects.slice(0, 3)
 
-  const quickStart = () => {
-    const p = createProject('פרויקט חדש', '')
-    nav(`/p/${p.id}/permit`)
-  }
+  // פרויקט חדש מתחיל בכתובת: מעבר לטופס בספריית הפרויקטים
+  const quickStart = () => nav('/projects#new')
 
   return (
     <div>

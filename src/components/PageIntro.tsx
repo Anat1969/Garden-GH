@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import type { Label } from '../lib/types'
-import { Tag } from './ui'
+import { LabelLegend, Tag } from './ui'
 
 export type ArtId = 'overview' | 'permit' | 'dims' | 'plan' | 'model' | 'bom' | 'phases' | 'variants' | 'prices' | 'projects' | 'design' | 'guide'
 
@@ -14,13 +14,32 @@ export interface Insight {
   tone?: 'good' | 'warn' | 'bad'
 }
 
-export function PageIntro({ eyebrow, title, why, insights = [], art, children, compact }: { eyebrow?: string; title: string; why: ReactNode; insights?: Insight[]; art: ArtId; children?: ReactNode; compact?: boolean }) {
+// why: משפט פתיחה אחד. points: רשימה ממוספרת, משפט אחד בכל שורה
+export function PageIntro({ eyebrow, title, why, points, insights = [], art, children, compact, legend }: { eyebrow?: string; title: string; why?: ReactNode; points?: ReactNode[]; insights?: Insight[]; art: ArtId; children?: ReactNode; compact?: boolean; legend?: boolean }) {
   return (
     <section className={`page-intro ${compact ? 'compact' : ''}`} data-testid="page-intro">
       <div className="pi-text">
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h2 className="pi-title">{title}</h2>
-        <p className="page-why">{why}</p>
+        {why && <p className="page-why">{why}</p>}
+        {points && points.length > 0 &&
+          (compact ? (
+            <details className="pi-how">
+              <summary>איך עובדים כאן</summary>
+              <ol className="pi-points">
+                {points.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ol>
+              {legend && <LabelLegend />}
+            </details>
+          ) : (
+            <ol className="pi-points">
+              {points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ol>
+          ))}
         {insights.length > 0 && (
           <div className="pi-insights">
             {insights.map((i) => (
@@ -37,6 +56,7 @@ export function PageIntro({ eyebrow, title, why, insights = [], art, children, c
           </div>
         )}
         {children}
+        {legend && !compact && <LabelLegend />}
       </div>
       <PageArt id={art} />
     </section>

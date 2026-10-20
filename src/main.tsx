@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
-import { addProject, initAuth } from './lib/store'
+import { addProject, getState, initAuth, mergeDuplicateProjects } from './lib/store'
 import { buildShaniProject, SHANI_FLAG } from './data/shaniProject'
 
 void initAuth()
@@ -11,12 +11,15 @@ void initAuth()
 // הפרויקט של שני נוצר פעם אחת בכל מכשיר, כדוגמה שאפשר להתחיל לתכנן עליה
 try {
   if (!localStorage.getItem(SHANI_FLAG)) {
-    addProject(buildShaniProject())
+    if (!getState().projects.some((p) => p.name === 'הבית של שני')) addProject(buildShaniProject())
     localStorage.setItem(SHANI_FLAG, '1')
   }
 } catch {
   /* בלי אחסון מקומי אין יצירה אוטומטית */
 }
+
+// פרויקטים כפולים מגרסאות קודמות מתאחדים לפי כתובת
+mergeDuplicateProjects()
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

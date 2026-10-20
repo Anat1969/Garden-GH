@@ -5,6 +5,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { GardenLine, GardenObject, Pt, Sketch, SurfaceMaterial } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS } from '../lib/garden'
 import { textureCanvas } from '../lib/textures'
+import { useModelFinish } from '../lib/finish'
 
 const SEL = '#2f5d4a'
 
@@ -30,7 +31,18 @@ export function useSurfaceTexture(material: SurfaceMaterial, color: string | und
 }
 
 function Mat({ color, selected, roughness = 0.9, opacity }: { color: string; selected: boolean; roughness?: number; opacity?: number }) {
-  return <meshStandardMaterial color={selected ? SEL : color} roughness={roughness} transparent={opacity !== undefined} opacity={opacity ?? 1} />
+  const finish = useModelFinish()
+  const c = finish === 'massing' ? '#d6d7d3' : color
+  return <meshStandardMaterial color={selected ? SEL : c} emissive={selected ? SEL : '#000000'} emissiveIntensity={selected ? 0.35 : 0} roughness={roughness} transparent={opacity !== undefined} opacity={opacity ?? 1} />
+}
+
+// חומר משטח לפי רמת הגימור: סכמטי אפור, צבע אחיד, או טקסטורה
+export function SurfMat({ material, color, selected, tex }: { material: SurfaceMaterial; color?: string; selected: boolean; tex: THREE.Texture }) {
+  const finish = useModelFinish()
+  if (selected) return <meshStandardMaterial color={SEL} emissive={SEL} emissiveIntensity={0.3} roughness={0.95} />
+  if (finish === 'massing') return <meshStandardMaterial color="#e4e4e0" roughness={1} />
+  if (finish === 'color') return <meshStandardMaterial color={color || MATERIALS[material].color} roughness={material === 'water' ? 0.2 : 0.95} />
+  return <meshStandardMaterial map={tex} roughness={material === 'water' ? 0.15 : 0.95} />
 }
 
 // ---------- פריט נקודתי ----------
@@ -275,8 +287,8 @@ export function GardenLineMesh({ l, selected, onSelect }: { l: GardenLine; selec
       {segs(l.pts).map((s, i) => (
         <mesh key={i} position={[s.cx, l.level + h / 2, s.cy]} rotation={[0, -s.ang, 0]} castShadow={!flat} receiveShadow>
           <boxGeometry args={[s.L + (l.type === 'path' ? w * 0.5 : w * 0.3), h, w]} />
-          {l.type === 'path' && !selected ? (
-            <meshStandardMaterial map={pathTex} roughness={0.95} />
+          {l.type === 'path' ? (
+            <SurfMat material="paving" color={l.color} selected={selected} tex={pathTex} />
           ) : (
             <meshStandardMaterial
               color={selected ? SEL : c}

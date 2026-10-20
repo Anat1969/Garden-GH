@@ -45,7 +45,7 @@ export default function App() {
           </Routes>
         </Suspense>
       </main>
-      <footer className="footer">Garden-GH · {'הערכה בלבד עד לאישור מול מחירון מעודכן וספק.'}</footer>
+      <footer className="footer">תכנון גינה · {'הערכה בלבד עד לאישור מול מחירון מעודכן וספק.'}</footer>
       <ToastHost />
     </>
   )

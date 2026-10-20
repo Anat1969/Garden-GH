@@ -33,15 +33,15 @@ export default function VariantsTab() {
       <PageIntro
         art="variants"
         title="כמה כיוונים לאותה גינה, והשוואה ביניהם"
-        why={
-          <>
-            כל <b>חלופה</b> היא עותק עצמאי של התכנון: ידני, <b>הצעה אוטומטית בסגנון</b> מסוים, או גרסה חסכונית. ההשוואה מראה <b>הפרש עלות</b> מול הגרסה הבסיסית, וההיתר וקנה המידה משותפים לכולן.
-          </>
-        }
+        points={[
+          <>כל <b>חלופה</b> היא עותק עצמאי של התכנון: ידני, הצעה בסגנון, או גרסה חסכונית.</>,
+          <>ההשוואה מראה <b>הפרש עלות</b> מול החלופה הראשונה.</>,
+          <>ההיתר וקנה המידה משותפים לכל החלופות.</>,
+        ]}
         insights={[
           { k: 'חלופות', v: project.variants.length },
           { k: 'פעילה', v: variant.name },
-          { k: 'בסיסית', v: baseStats.max ? `${fmtMoney(baseStats.min)} עד ${fmtMoney(baseStats.max)}` : 'אין מחירים' },
+          { k: 'החלופה הראשונה', v: baseStats.max ? `${fmtMoney(baseStats.min)} עד ${fmtMoney(baseStats.max)}` : 'אין מחירים' },
         ]}
       />
       <form className="card" onSubmit={create}>
@@ -65,7 +65,7 @@ export default function VariantsTab() {
           return (
             <Rise key={v.id} delay={i * 0.04} className="card" style={v.id === project.activeVariantId ? { outline: '2px solid var(--accent)' } : undefined}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
-                <div className="eyebrow">{isBase ? 'גרסה בסיסית' : new Date(v.createdAt).toLocaleDateString('he-IL')}</div>
+                <div className="eyebrow">{isBase ? 'החלופה הראשונה' : new Date(v.createdAt).toLocaleDateString('he-IL')}</div>
                 {v.id === project.activeVariantId && <span className="lbl measured">פעילה</span>}
               </div>
               <input className="input" style={{ marginTop: 6, fontWeight: 500 }} value={v.name} onChange={(e) => patch(v.id, (x) => ({ ...x, name: e.target.value }))} aria-label="שם חלופה" />
@@ -77,7 +77,7 @@ export default function VariantsTab() {
               </div>
               {!isBase && (
                 <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                  הפרש מהבסיס: {s.count - baseStats.count >= 0 ? '+' : ''}
+                  הפרש מהחלופה הראשונה: {s.count - baseStats.count >= 0 ? '+' : ''}
                   {s.count - baseStats.count} אלמנטים
                   {diffCost !== null && ` · ${diffCost >= 0 ? 'יקרה ב' : 'זולה ב'}${fmtMoney(Math.abs(diffCost))} (אמצע הטווח)`}
                 </div>

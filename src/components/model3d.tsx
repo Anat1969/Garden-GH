@@ -4,7 +4,8 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { Building, Project, Pt, Surface } from '../lib/types'
 import { MATERIALS } from '../lib/garden'
 import { bbox, simplify } from '../lib/geom'
-import { useSurfaceTexture } from './garden3d'
+import { SurfMat, useSurfaceTexture } from './garden3d'
+import { useModelFinish } from '../lib/finish'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -62,7 +63,7 @@ export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: b
         onSelect(s.id)
       }}
     >
-      {selected ? <meshStandardMaterial color="#2f5d4a" roughness={0.95} /> : <meshStandardMaterial map={tex} roughness={s.material === 'water' ? 0.15 : 0.95} />}
+      <SurfMat material={s.material} color={s.color} selected={selected} tex={tex} />
     </mesh>
   )
 }
@@ -78,14 +79,14 @@ export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Buildin
         <group key={i}>
           {eave && <UpperBlock fp={fp} z0={b.groundHeight} z1={eave} />}
           {eave && ridge && (b.roofType === 'gable' || b.roofType === 'mixed' || b.roofType === 'hip') && <Gable fp={fp} eave={eave} ridge={ridge} />}
-          {eave && (!ridge || b.roofType === 'flat') && <UpperBlock fp={fp} z0={eave} z1={eave + 0.25} color="#cfd2cc" />}
+          {eave && (!ridge || b.roofType === 'flat') && <UpperBlock fp={fp} z0={eave} z1={eave + 0.25} color="#a9aca8" />}
         </group>
       ))}
     </>
   )
 }
 
-function UpperBlock({ fp, z0, z1, color = '#f1efe9' }: { fp: Pt[]; z0: number; z1: number; color?: string }) {
+function UpperBlock({ fp, z0, z1, color = '#c9cbc7' }: { fp: Pt[]; z0: number; z1: number; color?: string }) {
   const geom = useMemo(() => {
     const shape = new THREE.Shape(fp.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false })
@@ -95,7 +96,7 @@ function UpperBlock({ fp, z0, z1, color = '#f1efe9' }: { fp: Pt[]; z0: number; z
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} position={[0, z0, 0]} castShadow receiveShadow>
-      <meshStandardMaterial color={color} roughness={0.9} transparent opacity={0.92} />
+      <meshStandardMaterial color={color} roughness={0.92} />
     </mesh>
   )
 }
@@ -131,7 +132,7 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} castShadow>
-      <meshStandardMaterial color="#b4553c" roughness={0.8} side={THREE.DoubleSide} />
+      <meshStandardMaterial color="#9a9d99" roughness={0.85} side={THREE.DoubleSide} />
     </mesh>
   )
 }
@@ -139,12 +140,13 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
 // ---------- עצים ----------
 
 export function Tree({ at, r, kind, level }: { at: Pt; r: number; kind: 'tree' | 'palm' | 'shrub'; level: number }) {
+  const massing = useModelFinish() === 'massing'
   const rr = Math.min(Math.max(r, 0.4), 5)
   if (kind === 'shrub')
     return (
       <mesh position={[at.x, level + rr * 0.45, at.y]} castShadow>
         <sphereGeometry args={[rr * 0.6, 14, 10]} />
-        <meshStandardMaterial color="#6f9a5f" roughness={1} />
+        <meshStandardMaterial color={massing ? '#d6d7d3' : '#6f9a5f'} roughness={1} />
       </mesh>
     )
   const trunkH = kind === 'palm' ? 4.5 : 2.2
@@ -152,11 +154,11 @@ export function Tree({ at, r, kind, level }: { at: Pt; r: number; kind: 'tree' |
     <group position={[at.x, level, at.y]}>
       <mesh position={[0, trunkH / 2, 0]} castShadow>
         <cylinderGeometry args={[0.1, 0.16, trunkH, 8]} />
-        <meshStandardMaterial color="#7a5a3a" />
+        <meshStandardMaterial color={massing ? '#c4c5c1' : '#7a5a3a'} />
       </mesh>
       <mesh position={[0, trunkH + (kind === 'palm' ? 0.3 : rr * 0.7), 0]} castShadow>
         {kind === 'palm' ? <coneGeometry args={[rr * 0.9, 0.8, 9]} /> : <sphereGeometry args={[rr * 0.85, 16, 12]} />}
-        <meshStandardMaterial color={kind === 'palm' ? '#5e8a4e' : '#4f7d47'} roughness={1} />
+        <meshStandardMaterial color={massing ? '#d6d7d3' : kind === 'palm' ? '#5e8a4e' : '#4f7d47'} roughness={1} />
       </mesh>
     </group>
   )
