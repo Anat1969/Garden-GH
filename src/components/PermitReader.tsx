@@ -5,14 +5,15 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { Building, Drawing, DrawingKind, Permit, Project } from '../lib/types'
 import { DRAWING_KIND_TEXT } from '../lib/types'
 import { mapPage, pickGardenDrawing, readHeights, readStructure, renderRegion } from '../lib/permitReader'
-import { structureToElements, STRUCT_SRC, baseAbs, isAutoHouse, replaceAuto } from '../lib/structureToElements'
+import { baseAbs } from '../lib/structureToElements'
 import { PT_TO_M_AT_1 } from '../lib/pdf'
 import { polyArea } from '../lib/geom'
 import { aiAvailable, readPageWithAi } from '../lib/aiRead'
 import { attachLines, mergeDims } from '../lib/dims'
-import { getState, setPlanScale, uid, updateProject, updateVariant } from '../lib/store'
+import { getState, setPlanScale, uid, updateProject } from '../lib/store'
 import { Loading, Modal, NumField, Tag, toast } from './ui'
 import { IconBtn } from './EditIcons'
+import { buildHouse } from '../lib/buildHouse'
 
 const MEANING_TEXT: Record<string, string> = {
   ground_floor: 'רצפת קומת קרקע',
@@ -139,17 +140,13 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     note(`נקראו ${r.dims.length} מידות ומפלסים בשרטוט העבודה`)
   }
 
+  // בניית הבית: קנה מידה אוטומטי מהמידות אם חסר, ואז קירות, פתחים, גבול מגרש ואזורי גינה
+  const [nextStep, setNextStep] = useState<{ to: string; t: string } | null>(null)
   const buildElements = () => {
-    const p = latest()
-    const els = structureToElements(p, uid)
-    if (!els.length) {
-      note('אין קנה מידה או קריאת מבנה, לא נבנו אלמנטים')
-      return 0
-    }
-    const replaced = p.variants.find((v) => v.id === p.activeVariantId)!.elements.filter((e) => isAutoHouse(e) || e.source.startsWith(STRUCT_SRC)).length
-    updateVariant(project.id, (v) => ({ ...v, elements: replaceAuto(v.elements, els, true) }))
-    note(`נבנו ${els.length} אלמנטים בחלופה הפעילה${replaced ? `, במקום ${replaced} שנבנו קודם` : ''}. כולם "מוערך" עד אישור`)
-    return els.length
+    const r = buildHouse(project.id)
+    r.lines.forEach(note)
+    setNextStep(r.next ?? null)
+    return r.count
   }
 
   // כל פעולה מסתיימת בהודעה ובחלון שמראה מה יצא
@@ -178,8 +175,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       await doStructure(g)
       await doHeights(list)
       await doDims(g)
-      if (!latest().permit?.scale.metersPerPt) note('אין עדיין קנה מידה. קובעים אותו במסך המידות, ואז בונים את המודל.')
-      else buildElements()
+      buildElements()
     }, 'קריאת ההיתר הסתיימה')
 
   const b = project.building
@@ -232,9 +228,9 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
               </ol>
             </div>
             <div className="reader-action">
-              <IconBtn icon="build" label="בנייה מחדש של האלמנטים" disabled={!!busy || !s} onClick={() => run(async () => void buildElements(), 'הבנייה מחדש הסתיימה')} />
+              <IconBtn icon="build" label="בניית הבית בתלת-ממד" disabled={!!busy} onClick={() => run(async () => void buildElements(), 'בניית הבית')} />
               <ol>
-                <li>בונה את הבית, הפתחים, גבול המגרש ואזורי הגינה מהקריאה האחרונה.</li>
+                <li>בונה את הבית, הפתחים, גבול המגרש ואזורי הגינה מהקריאה האחרונה. כשחסר קנה מידה, הוא נקבע מהמידות הכתובות.</li>
                 <li>
                   <b>מחליפה</b> את מה שנבנה אוטומטית קודם, כך שאין בית על בית.
                 </li>
@@ -250,11 +246,18 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
           onClose={() => setResult(null)}
           actions={
             <>
-              <Link className="btn primary" to="../plan">
+              {nextStep && (
+                <Link className="btn primary" to={`../${nextStep.to}`}>
+                  {nextStep.t}
+                </Link>
+              )}
+              {nextStep?.to !== 'model' && (
+                <Link className="btn" to="../model">
+                  למודל
+                </Link>
+              )}
+              <Link className="btn" to="../plan">
                 לתוכנית
-              </Link>
-              <Link className="btn" to="../model">
-                למודל
               </Link>
             </>
           }

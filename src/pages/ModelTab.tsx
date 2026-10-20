@@ -11,13 +11,14 @@ import { textureUrl } from '../lib/textures'
 import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTexture } from '../components/garden3d'
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
-import { NO_BASIS, hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
+import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
 import { BuildingMass, Label3D, NorthArrow, PolySurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
-import { Empty, Tag } from '../components/ui'
+import { Tag } from '../components/ui'
 import { IconBtn } from '../components/EditIcons'
+import { buildHouse, type BuildResult } from '../lib/buildHouse'
 import { PageIntro } from '../components/PageIntro'
 
 function Controls({ target, dist, focus }: { target: [number, number, number]; dist: number; focus: { at: [number, number, number]; key: number } | null }) {
@@ -264,6 +265,47 @@ function centroid(p: { x: number; y: number }[]) {
   return { x: x / p.length, y: y / p.length }
 }
 
+// בניית הבית מההיתר ישירות ממסך המודל, עם הסבר ברור כשמשהו חסר
+function BuildHousePanel({ projectId, title, empty }: { projectId: string; title: string; empty?: boolean }) {
+  const [res, setRes] = useState<BuildResult | null>(null)
+  return (
+    <div className="card build-house" data-testid="build-house">
+      <div className="h-section" style={{ marginBottom: 4 }}>
+        {title}
+      </div>
+      <ol className="steps-list">
+        <li>
+          <b>בניית הבית מההיתר</b> בונה בתלת-ממד את הקירות, הפתחים, גבול המגרש ואזורי הגינה מקריאת ההיתר.
+        </li>
+        <li>כשחסר קנה מידה, הוא נקבע מהמידות שכתובות בהיתר.</li>
+        {empty && <li>אפשר גם לשרטט קירות ומשטחים ידנית בתוכנית.</li>}
+      </ol>
+      <div className="row" style={{ marginTop: 10 }}>
+        <IconBtn icon="build" label="בניית הבית מההיתר" className="primary" onClick={() => setRes(buildHouse(projectId))} testId="build-house-btn" />
+        {empty && (
+          <Link className="btn" to="../plan">
+            לשרטוט ידני בתוכנית
+          </Link>
+        )}
+      </div>
+      {res && (
+        <div className={`notice ${res.ok ? 'info' : 'danger'}`} style={{ marginTop: 10 }} data-testid="build-house-result">
+          <ol className="steps-list">
+            {res.lines.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ol>
+          {!res.ok && res.next && (
+            <Link className="btn small primary" to={`../${res.next.to}`} style={{ marginTop: 8 }}>
+              {res.next.t}
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ModelTab() {
   const { project, variant } = useProject()
   const [params, setParams] = useSearchParams()
@@ -280,35 +322,16 @@ export default function ModelTab() {
     setParams(p, { replace: true })
   }
 
-  if (!hasBasis(project)) {
-    return (
-      <div className="card">
-        <Empty title={NO_BASIS}>
-          <div>המודל נבנה רק אחרי שנקבע קנה מידה מההיתר, או אחרי בחירה במידות ידניות.</div>
-          <Link className="btn primary" to="../permit">
-            להיתר
-          </Link>
-        </Empty>
-      </div>
-    )
-  }
-  if (!variant.elements.length) {
-    return (
-      <div className="card">
-        <Empty title="אין עדיין אלמנטים למודל">
-          <div>מזהים קירות מההיתר או משרטטים במסך התוכנית.</div>
-          <Link className="btn primary" to="../plan">
-            לתוכנית
-          </Link>
-        </Empty>
-      </div>
-    )
+  const houseWalls = variant.elements.filter((e) => e.kind === 'wall' && e.scope === 'house').length
+  if (!hasBasis(project) || !variant.elements.length) {
+    return <BuildHousePanel projectId={project.id} empty title={!hasBasis(project) ? 'המודל עוד לא נבנה: חסר קנה מידה' : 'אין עדיין אלמנטים למודל'} />
   }
 
   const unapproved = variant.elements.filter((e) => !e.approved).length
 
   return (
     <div className="stack" style={{ gap: 12 }}>
+    {houseWalls === 0 && <BuildHousePanel projectId={project.id} title="הבית עוד לא נבנה במודל" />}
     <PageIntro
       art="model"
       compact
