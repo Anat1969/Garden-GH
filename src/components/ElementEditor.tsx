@@ -3,6 +3,7 @@ import { LABEL_TEXT, MATERIAL_TEXT, KIND_TEXT } from '../lib/types'
 import { removeElement, upsertElement } from '../lib/store'
 import { NumField, Num, Tag } from './ui'
 import { dimLabelText, dimsForElement } from '../lib/dims'
+import { surfaceArea } from '../lib/bom'
 
 const len = (w: { x1: number; y1: number; x2: number; y2: number }) => Math.hypot(w.x2 - w.x1, w.y2 - w.y1)
 
@@ -81,8 +82,8 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
                 ))}
               </select>
             </label>
-            <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />
-            <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />
+            {!el.poly && <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />}
+            {!el.poly && <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />}
             <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
           </>
         )}
@@ -111,7 +112,8 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
 
       {el.kind === 'surface' && (
         <div style={{ marginTop: 10 }}>
-          שטח: <Num value={el.w * el.d} unit='מ"ר' label={el.label} />
+          שטח: <Num value={surfaceArea(el)} unit='מ"ר' label={el.label} />
+          {el.poly && <span className="muted" style={{ fontSize: 13 }}> · מצולע מההיתר ({el.poly.length} קודקודים)</span>}
         </div>
       )}
       {el.kind === 'fence' && el.boundary && <div className="notice" style={{ marginTop: 10 }}>גבול מגרש בהיתר: לאימות במדידה.</div>}

@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls as OrbitImpl } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
-import type { Element, Fence, Opening, Surface, Wall } from '../lib/types'
+import type { Element, Fence, Opening, Project, Surface, Wall } from '../lib/types'
 import { MATERIAL_COLOR, MATERIAL_TEXT } from '../lib/types'
 import { ElementEditor } from '../components/ElementEditor'
-import { NO_BASIS, hasBasis, numberedNames } from '../lib/bom'
+import { NO_BASIS, hasBasis, numberedNames, surfaceArea, fmtNum } from '../lib/bom'
+import { BuildingMass, Label3D, NorthArrow, PolySurface, Tree, unitFootprints } from '../components/model3d'
+import { baseAbs } from '../lib/structureToElements'
+import { LABEL_TEXT } from '../lib/types'
+import { pointInPoly } from '../lib/geom'
 import { Empty, Tag } from '../components/ui'
 
 function Controls({ target, dist }: { target: [number, number, number]; dist: number }) {
@@ -118,40 +122,89 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
   )
 }
 
-function Scene({ elements, selected, onSelect }: { elements: Element[]; selected: string | null; onSelect: (id: string | null) => void }) {
+function Scene({ project, elements, selected, onSelect, showDims }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean }) {
   const bounds = useMemo(() => {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, minL = 0
     for (const e of elements) {
-      const pts = e.kind === 'surface' ? [[e.x, e.y], [e.x + e.w, e.y + e.d]] : e.kind === 'opening' ? [] : [[e.x1, e.y1], [e.x2, e.y2]]
+      const pts = e.kind === 'surface' ? (e.poly ?? [{ x: e.x, y: e.y }, { x: e.x + e.w, y: e.y + e.d }]).map((v) => [v.x, v.y]) : e.kind === 'opening' ? [] : [[e.x1, e.y1], [e.x2, e.y2]]
       for (const [x, y] of pts) {
         minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
       }
+      if (e.kind === 'surface') minL = Math.min(minL, e.level)
     }
-    if (!Number.isFinite(minX)) return { cx: 0, cy: 0, size: 20 }
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY) }
+    if (!Number.isFinite(minX)) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0 }
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL }
   }, [elements])
   const openings = elements.filter((e): e is Opening => e.kind === 'opening')
+  const footprints = useMemo(() => unitFootprints(project), [project])
+  const st = project.permit?.structure
+  const mpp = project.permit?.scale.metersPerPt ?? 0
+  const base = baseAbs(project)
+  const surfaces = elements.filter((e): e is Surface => e.kind === 'surface')
+  const levelAt = (x: number, y: number) => surfaces.find((sf) => sf.poly && pointInPoly({ x, y }, sf.poly))?.level ?? 0
   return (
     <>
       <hemisphereLight args={['#ffffff', '#b8c4bb', 0.7]} />
       <directionalLight position={[bounds.cx + bounds.size, bounds.size * 1.4, bounds.cy + bounds.size * 0.6]} intensity={1.6} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-left={-bounds.size} shadow-camera-right={bounds.size} shadow-camera-top={bounds.size} shadow-camera-bottom={-bounds.size} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, -0.01, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, bounds.minL - 0.06, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
         <planeGeometry args={[bounds.size * 4, bounds.size * 4]} />
         <meshStandardMaterial color="#dfe3dc" roughness={1} />
       </mesh>
-      <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, 0, bounds.cy]} />
+      <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, bounds.minL - 0.05, bounds.cy]} />
       {elements.map((e) =>
         e.kind === 'wall' ? (
           <WallMesh key={e.id} w={e} openings={openings} selected={selected} onSelect={onSelect} />
         ) : e.kind === 'surface' ? (
-          <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
+          e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'fence' ? (
           <FenceMesh key={e.id} f={e} selected={selected === e.id} onSelect={onSelect} />
         ) : null,
       )}
+      {project.building && footprints.length > 0 && <BuildingMass footprints={footprints} b={project.building} />}
+      {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
+      {showDims && <DimLabels elements={elements} k={Math.max(0.38, bounds.size * 0.024)} />}
+      {showDims && st && mpp > 0 &&
+        st.levels.slice(0, 60).map((l, i) => {
+          const x = l.at.x * mpp
+          const y = l.at.y * mpp
+          const rel = l.rel ?? (l.abs !== null && base !== null ? l.abs - base : null)
+          const txt = `${l.abs !== null ? l.abs.toFixed(2) : ''}${rel !== null ? ` (${rel >= 0 ? '+' : ''}${rel.toFixed(2)})` : ''}`
+          return txt ? <Label3D key={`lv${i}`} text={txt} position={[x, levelAt(x, y) + 0.8, y]} size={Math.max(0.36, bounds.size * 0.022)} color="#48546b" /> : null
+        })}
+      <NorthArrow deg={project.north || 0} at={{ x: bounds.minX - 2, y: bounds.minY - 2 }} size={Math.max(1.2, bounds.size * 0.05)} />
       <Controls target={[bounds.cx, 0, bounds.cy]} dist={bounds.size * 1.1} />
     </>
   )
+}
+
+// תוויות מידה: אורך קירות וגדרות, שטח משטחים, כל אחת עם התווית שלה
+function DimLabels({ elements, k }: { elements: Element[]; k: number }) {
+  return (
+    <>
+      {elements.map((e) => {
+        if (e.kind === 'wall' || e.kind === 'fence') {
+          const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
+          if (L < 0.8) return null
+          return <Label3D key={e.id} text={`${fmtNum(L)} מ' · ${LABEL_TEXT[e.label]}`} position={[(e.x1 + e.x2) / 2, e.height + k, (e.y1 + e.y2) / 2]} size={k} />
+        }
+        if (e.kind === 'surface') {
+          const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
+          return <Label3D key={e.id} text={`${fmtNum(surfaceArea(e), 1)} מ"ר · ${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)} · ${LABEL_TEXT[e.label]}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
+        }
+        return null
+      })}
+    </>
+  )
+}
+
+function centroid(p: { x: number; y: number }[]) {
+  let x = 0
+  let y = 0
+  p.forEach((v) => {
+    x += v.x
+    y += v.y
+  })
+  return { x: x / p.length, y: y / p.length }
 }
 
 export default function ModelTab() {
@@ -160,6 +213,7 @@ export default function ModelTab() {
   const selId = params.get('el')
   const names = useMemo(() => numberedNames(variant.elements), [variant.elements])
   const selected = variant.elements.find((e) => e.id === selId) ?? null
+  const [showDims, setShowDims] = useState(true)
   const select = (id: string | null) => {
     const p = new URLSearchParams(params)
     if (id) p.set('el', id)
@@ -198,8 +252,13 @@ export default function ModelTab() {
     <div className="editor">
       <div className="model-box" data-testid="model-canvas">
         <Canvas shadows dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} onPointerMissed={() => select(null)}>
-          <Scene elements={variant.elements} selected={selId} onSelect={select} />
+          <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} />
         </Canvas>
+        <div style={{ position: 'absolute', top: 10, insetInlineStart: 10, display: 'flex', gap: 6 }}>
+          <button className={`btn small ${showDims ? 'active' : ''}`} onClick={() => setShowDims((v) => !v)} aria-pressed={showDims}>
+            הצגת מידות
+          </button>
+        </div>
         <div className="model-legend">
           <span className="swatch">
             <i style={{ background: '#eceae4', border: '1px solid #bbb' }} />

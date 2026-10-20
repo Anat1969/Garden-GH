@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { PlanDimension } from './types'
+import type { Box, PlanDimension } from './types'
+import { renderRegion } from './permitReader'
 
 // קריאה חכמה של מידות: הגיליון מחולק לאריחים בגודל שהמודל קורא בחדות מלאה (עד 2576 פיקסל לצלע),
 // כל אריח נשלח לפונקציית garden-read-plan, והתוצאות מוחזרות ליחידות העמוד.
@@ -65,17 +66,13 @@ export async function readPageWithAi(
   detail: Detail,
   newId: () => string,
   onProgress: (done: number, total: number) => void,
+  box?: Box,
 ): Promise<AiResult> {
   const page = await doc.getPage(pageNo)
   const vp1 = page.getViewport({ scale: 1 })
-  const plan = tilePlan(vp1.width, vp1.height, isImage, detail)
-  const canvas = document.createElement('canvas')
-  canvas.width = plan.W
-  canvas.height = plan.H
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, plan.W, plan.H)
-  await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale: plan.scale }) }).promise
+  const region = box ?? { x: 0, y: 0, w: vp1.width, h: vp1.height }
+  const plan = tilePlan(region.w, region.h, isImage, detail)
+  const { canvas } = await renderRegion(doc, pageNo, region, Math.max(plan.W, plan.H), 100)
 
   const tw = Math.ceil(plan.W / plan.nx)
   const th = Math.ceil(plan.H / plan.ny)
@@ -107,7 +104,7 @@ export async function readPageWithAi(
         const r = await callFn(b64, t.w, t.h, hint)
         if (r.scale_text && !scaleText) scaleText = r.scale_text
         for (const it of r.dimensions ?? []) {
-          const d = toDim(it, t, plan.scale, pageNo, newId)
+          const d = toDim(it, t, plan.scale, pageNo, newId, region)
           if (d) dims.push(d)
         }
       } catch (e) {
@@ -122,11 +119,11 @@ export async function readPageWithAi(
   return { dims, scaleText, tiles: tiles.length, failed, errors: [...new Set(errors)] }
 }
 
-function toDim(it: AiItem, t: { x: number; y: number; w: number; h: number }, s: number, page: number, newId: () => string): PlanDimension | null {
+function toDim(it: AiItem, t: { x: number; y: number; w: number; h: number }, s: number, page: number, newId: () => string, region: Box): PlanDimension | null {
   if (!Number.isFinite(it.value)) return null
   const b = it.text_box
   if (![b.x0, b.y0, b.x1, b.y1].every(Number.isFinite)) return null
-  const toPage = (x: number, y: number) => [(t.x + x) / s, (t.y + y) / s]
+  const toPage = (x: number, y: number) => [region.x + (t.x + x) / s, region.y + (t.y + y) / s]
   const [bx0, by0] = toPage(Math.min(b.x0, b.x1), Math.min(b.y0, b.y1))
   const [bx1, by1] = toPage(Math.max(b.x0, b.x1), Math.max(b.y0, b.y1))
   let value: number

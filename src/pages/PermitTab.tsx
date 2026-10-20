@@ -11,6 +11,7 @@ import { IMAGE_TYPES, imageToPdf } from '../lib/imageToPdf'
 import { PAGE_KIND_TEXT } from '../lib/types'
 import { NO_BASIS } from '../lib/bom'
 import { ErrorState, Loading, Rise, Tag, toast } from '../components/ui'
+import { PermitReader } from '../components/PermitReader'
 
 const VECTOR_SRC = 'זיהוי וקטורי'
 
@@ -259,6 +260,8 @@ export default function PermitTab() {
               </button>
             </div>
           </div>
+
+          {doc && <PermitReader project={project} doc={doc} />}
 
           <div className="card">
             <div className="h-section" style={{ marginBottom: 6 }}>

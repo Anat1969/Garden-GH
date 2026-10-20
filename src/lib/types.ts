@@ -55,6 +55,90 @@ export interface PlanDimension {
   status: DimStatus
 }
 
+export type DrawingKind =
+  | 'floor_plan'
+  | 'development_plan'
+  | 'site_plan'
+  | 'roof_plan'
+  | 'basement_plan'
+  | 'section'
+  | 'elevation'
+  | 'area_table'
+  | 'title_block'
+  | 'notes'
+  | 'other'
+
+export const DRAWING_KIND_TEXT: Record<DrawingKind, string> = {
+  floor_plan: 'תוכנית קומה',
+  development_plan: 'תכנית פיתוח שטח',
+  site_plan: 'תשריט / מפה מצבית',
+  roof_plan: 'תכנית גג',
+  basement_plan: 'מרתף / חניה ומסד',
+  section: 'חתך',
+  elevation: 'חזית',
+  area_table: 'טבלת שטחים',
+  title_block: 'גוש כותרת',
+  notes: 'הערות',
+  other: 'אחר',
+}
+
+export interface Box {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+// שרטוט אחד בתוך גיליון ההיתר. קואורדינטות ביחידות העמוד.
+export interface Drawing {
+  id: string
+  page: number
+  box: Box
+  kind: DrawingKind
+  title: string
+  floor: string
+  scaleDen: number | null
+}
+
+export interface Pt {
+  x: number
+  y: number
+}
+
+// קריאת מבנה מתוכנית: ביחידות העמוד
+export interface PlanStructure {
+  drawingId: string
+  northDeg: number
+  units: { name: string; footprint: Pt[]; wallCm: number; levelRel: number; levelAbs: number | null }[]
+  openings: { type: 'door' | 'sliding_door' | 'window' | 'opening'; a: Pt; b: Pt }[]
+  plot: Pt[]
+  zones: { kind: string; label: string; polygon: Pt[]; levelAbs: number | null }[]
+  levels: { text: string; abs: number | null; rel: number | null; at: Pt }[]
+  trees: { at: Pt; r: number; kind: 'tree' | 'palm' | 'shrub' }[]
+  retaining: { a: Pt; b: Pt; label: string }[]
+  readAt: string
+}
+
+export interface BuildingLevel {
+  text: string
+  rel: number
+  abs: number | null
+  meaning: string
+  drawing: string
+}
+
+// הבניין בגובה: מקריאת חתכים וחזיתות
+export interface Building {
+  baseAbs: number | null // המפלס המוחלט של ±0.00
+  groundHeight: number // גובה קומת הקרקע (עד הרצפה הבאה)
+  eaveRel: number | null
+  ridgeRel: number | null
+  roofType: 'gable' | 'hip' | 'flat' | 'shed' | 'mixed'
+  storeys: number
+  levels: BuildingLevel[]
+  source: string
+}
+
 export interface DimScale {
   page: number
   metersPerPt: number
@@ -77,6 +161,10 @@ export interface Permit {
   dims?: PlanDimension[]
   dimScales?: DimScale[]
   aiReadAt?: string
+  drawings?: Drawing[]
+  region?: Box // השרטוט שעליו עובדים בעמוד התוכנית
+  workDrawingId?: string
+  structure?: PlanStructure
 }
 
 interface Base {
@@ -130,6 +218,7 @@ export const MATERIAL_COLOR: Record<SurfaceMaterial, string> = {
 export interface Surface extends Base {
   kind: 'surface'
   material: SurfaceMaterial
+  poly?: { x: number; y: number }[] // מצולע במטרים. כשקיים, x,y,w,d הם המלבן החוסם
   x: number
   y: number
   w: number
@@ -182,6 +271,7 @@ export interface Project {
   soil: string
   levelsNote: string
   permit: Permit | null
+  building?: Building
   variants: Variant[]
   activeVariantId: string
   createdAt: string

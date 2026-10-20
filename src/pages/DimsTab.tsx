@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { usePermitDoc } from '../lib/usePermit'
-import { extractSegments, renderPage } from '../lib/pdf'
+import { extractSegments } from '../lib/pdf'
+import { renderRegion } from '../lib/permitReader'
 import { attachLines, denFromMpp, dimLabelText, mergeDims, reliableDimScale, segLen, inferScale } from '../lib/dims'
 import { aiAvailable, readPageWithAi, type Detail } from '../lib/aiRead'
 import { setPlanScale, uid, updateProject } from '../lib/store'
 import type { DimScale, Label, Permit, PlanDimension } from '../lib/types'
-import { PAGE_KIND_TEXT } from '../lib/types'
+import { DRAWING_KIND_TEXT, PAGE_KIND_TEXT } from '../lib/types'
 import { Empty, ErrorState, Loading, NumField, Tag, toast } from '../components/ui'
 
 export const dimLabel = (d: PlanDimension): Label => (d.source === 'text-layer' || d.status === 'confirmed' ? 'measured' : 'estimated')
@@ -36,25 +37,34 @@ export default function DimsTab() {
   const drag = useRef<{ sx: number; sy: number; v: View; moved: boolean } | null>(null)
 
   const pg = permit?.pages.find((p) => p.index === page)
-  const W = pg?.widthPt ?? 100
-  const H = pg?.heightPt ?? 100
-  const [view, setView] = useState<View>({ x: 0, y: 0, w: W, h: H })
-  useEffect(() => setView({ x: 0, y: 0, w: W, h: H }), [W, H])
+  const pageDrawings = (permit?.drawings ?? []).filter((d) => d.page === page)
+  const drawingId = params.get('drawing') ?? (page === permit?.planPage ? permit?.workDrawingId ?? '' : '')
+  const drawing = pageDrawings.find((d) => d.id === drawingId)
+  // האזור המוצג: שרטוט אחד מהגיליון, או העמוד כולו
+  const area = drawing?.box ?? { x: 0, y: 0, w: pg?.widthPt ?? 100, h: pg?.heightPt ?? 100 }
+  const [view, setView] = useState<View>(area)
+  const areaKey = `${area.x}:${area.y}:${area.w}:${area.h}`
+  useEffect(() => setView(area), [areaKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!doc || !pg) return
     let alive = true
     setBg(null)
-    renderPage(doc, pg.index, 2600)
-      .then((u) => alive && setBg(u))
+    renderRegion(doc, pg.index, area, 2600)
+      .then(({ canvas }) => alive && setBg(canvas.toDataURL('image/jpeg', 0.85)))
       .catch(() => undefined)
     return () => {
       alive = false
     }
-  }, [doc, pg?.index])
+  }, [doc, pg?.index, areaKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const all = permit?.dims ?? []
-  const onPage = all.filter((d) => d.page === page)
+  const inArea = (d: PlanDimension) => {
+    const cx = d.box.x + d.box.w / 2
+    const cy = d.box.y + d.box.h / 2
+    return cx >= area.x && cx <= area.x + area.w && cy >= area.y && cy <= area.y + area.h
+  }
+  const onPage = all.filter((d) => d.page === page && inArea(d))
   const shown = onPage.filter((d) => filter === 'all' || (filter === 'pending' ? d.status === 'pending' : d.status === 'confirmed'))
   const selected = onPage.find((d) => d.id === selId) ?? null
   const lengths = onPage.filter((d) => d.kind === 'length' && d.status !== 'rejected')
@@ -88,8 +98,14 @@ export default function DimsTab() {
     setError(null)
     try {
       setBusy('מכינה את הגיליון')
-      const r = await readPageWithAi(doc, page, permit.sourceType === 'image', detail, uid, (done, total) =>
-        setBusy(total > 1 ? `קוראת אריח ${Math.min(done + 1, total)} מתוך ${total}` : 'קוראת את הגיליון'),
+      const r = await readPageWithAi(
+        doc,
+        page,
+        permit.sourceType === 'image',
+        detail,
+        uid,
+        (done, total) => setBusy(total > 1 ? `קוראת אריח ${Math.min(done + 1, total)} מתוך ${total}` : 'קוראת את הגיליון'),
+        drawing?.box,
       )
       if (r.failed === r.tiles) throw new Error(r.errors[0] || 'הקריאה נכשלה')
       const segs = permit.sourceType === 'image' ? [] : (await extractSegments(await doc.getPage(page))).lines
@@ -194,6 +210,29 @@ export default function DimsTab() {
               ))}
             </select>
           </label>
+          {pageDrawings.length > 0 && (
+            <label className="field" style={{ minWidth: 220 }}>
+              <span>שרטוט</span>
+              <select
+                className="input"
+                value={drawing?.id ?? ''}
+                onChange={(e) => {
+                  const p = new URLSearchParams(params)
+                  p.set('drawing', e.target.value)
+                  p.delete('dim')
+                  setParams(p, { replace: true })
+                }}
+                aria-label="שרטוט"
+              >
+                <option value="">כל העמוד</option>
+                {pageDrawings.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.title || DRAWING_KIND_TEXT[d.kind]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <div className="row" style={{ marginTop: 10 }}>
           <button className="btn primary" disabled={!aiAvailable || !!busy || status !== 'ready'} onClick={() => runAi('normal')}>
@@ -240,7 +279,7 @@ export default function DimsTab() {
             <button className="btn small" onClick={() => zoom(1.3)}>
               רחוק
             </button>
-            <button className="btn small" onClick={() => setView({ x: 0, y: 0, w: W, h: H })}>
+            <button className="btn small" onClick={() => setView(area)}>
               התאמה
             </button>
           </div>
@@ -272,8 +311,8 @@ export default function DimsTab() {
             }}
             onPointerLeave={() => (drag.current = null)}
           >
-            {bg && <image href={bg} x={0} y={0} width={W} height={H} preserveAspectRatio="none" />}
-            <rect x={0} y={0} width={W} height={H} fill="none" stroke="#c2c8c4" strokeWidth={k} />
+            {bg && <image href={bg} x={area.x} y={area.y} width={area.w} height={area.h} preserveAspectRatio="none" />}
+            <rect x={area.x} y={area.y} width={area.w} height={area.h} fill="none" stroke="#c2c8c4" strokeWidth={k} />
             {shown.map((d) => {
               const c = d.status === 'rejected' ? COLOR.rejected : d.status === 'confirmed' ? COLOR.confirmed : d.source === 'text-layer' ? COLOR.text : COLOR.pending
               const sel = d.id === selId
