@@ -26,6 +26,8 @@ async function noHorizontalScroll(page: Page) {
   expect(over, 'horizontal overflow px').toBeLessThanOrEqual(1)
 }
 
+const menu = (page: Page) => page.getByRole('button', { name: 'תפריט המערכת' }).click()
+
 async function clickCanvas(page: Page, fx: number, fy: number) {
   await page.getByTestId('plan-canvas').scrollIntoViewIfNeeded()
   const box = (await page.getByTestId('plan-canvas').boundingBox())!
@@ -43,10 +45,21 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await page.waitForTimeout(1500)
   await page.screenshot({ path: 'shots/01-home.png', fullPage: true })
 
-  // סרגל עליון
-  await page.getByRole('button', { name: 'כניסה', exact: true }).click()
+  // הדגמת המסלול: מעבר בין שלבים
+  for (const st of ['קירות ופתחים', 'גינה ומפלסים', 'מודל תלת-ממדי', 'כתב כמויות', 'שלבים וחלופות', 'פרויקט והיתר']) {
+    await page.getByTestId('route-demo').getByRole('button', { name: new RegExp(st) }).click()
+    await expect(page.getByTestId('route-demo').locator('.demo-caption')).toContainText(st)
+  }
+  await page.getByTestId('route-demo').getByRole('button', { name: /כתב כמויות/ }).click()
+  await expect(page.getByTestId('demo-bom')).toContainText('הערכה בלבד')
+
+  // תפריט המערכת בלוגו
+  await menu(page)
   await expect(page.getByText('כניסה עם Google עדיין לא הופעלה')).toBeVisible()
-  await page.getByRole('button', { name: 'כניסה', exact: true }).click()
+  await page.screenshot({ path: 'shots/01b-menu.png' })
+  await page.keyboard.press('Escape')
+  await expect(page.locator('#system-menu')).toHaveCount(0)
+  await menu(page)
   await page.getByRole('link', { name: 'מחירון' }).first().click()
   await expect(page.getByRole('heading', { name: 'מחירון' })).toBeVisible()
   await expect(page.getByText('מחירון לא נטען').first()).toBeVisible()
@@ -54,6 +67,7 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await expect(page).toHaveURL(/\/$/)
 
   // פרויקט חדש
+  await menu(page)
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()
   await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('גינת בדיקה')
   await page.getByPlaceholder('רחוב, עיר').fill('הרצל 1, אשדוד')
@@ -164,6 +178,7 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
 
   // העתקת קישור
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await menu(page)
   await page.getByRole('button', { name: 'העתקת קישור' }).click()
   await expect(page.getByText('הקישור הועתק')).toBeVisible()
   await expect(page.getByRole('link', { name: 'שיחת הפיתוח' })).toHaveAttribute('href', /claude\.ai\/code\/session_/)
@@ -194,10 +209,15 @@ test('מובייל 390: בלי גלילה אופקית בכל הדפים', async
     await noHorizontalScroll(page)
     await page.screenshot({ path: `shots/m-tab-${tab}.png`, fullPage: true })
   }
+  await menu(page)
+  await noHorizontalScroll(page)
+  await page.screenshot({ path: 'shots/m-menu.png' })
   await page.getByRole('link', { name: 'מחירון' }).first().click()
   await noHorizontalScroll(page)
+  await menu(page)
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()
   await noHorizontalScroll(page)
+  await page.screenshot({ path: 'shots/m-projects.png', fullPage: true })
   await page.goto('/no-such-page')
   await expect(page.getByText('הדף לא נמצא')).toBeVisible()
   await noHorizontalScroll(page)
@@ -216,18 +236,17 @@ test('ענן: סשן מזויף שולח שמירה ל-garden_projects', async (
   }
   await page.addInitScript((s) => localStorage.setItem('sb-ktqmwpbzcnzkhjskqisy-auth-token', JSON.stringify(s)), session)
   await page.goto('/projects')
-  await page.getByRole('button', { name: 'חשבון' }).click()
+  await menu(page)
   await expect(page.getByText('anat@example.com')).toBeVisible()
-  await page.getByRole('button', { name: 'חשבון' }).click()
+  await menu(page)
   await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('פרויקט ענן')
   await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
   await expect.poll(() => requests.some((r) => r.method === 'POST' && r.url.includes('/rest/v1/garden_projects') && (r.body ?? '').includes('פרויקט ענן'))).toBe(true)
   expect(requests.some((r) => r.method === 'GET' && r.url.includes('/rest/v1/garden_projects'))).toBe(true)
-  await page.getByRole('button', { name: 'חשבון' }).click()
+  await menu(page)
   await page.getByRole('button', { name: 'יציאה' }).click()
-  await expect(page.getByRole('button', { name: 'כניסה', exact: true })).toBeVisible()
   await page.waitForTimeout(400)
-  if (!(await page.getByRole('button', { name: 'כניסה עם Google' }).isVisible())) await page.getByRole('button', { name: 'כניסה', exact: true }).click()
+  if (!(await page.getByText('כניסה ושמירה בענן').isVisible())) await menu(page)
   await expect(page.getByRole('button', { name: 'כניסה עם Google' })).toBeVisible()
 })
 

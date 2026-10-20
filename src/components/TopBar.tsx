@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { signInGoogle, signOut, useApp } from '../lib/store'
@@ -39,6 +39,29 @@ export function TopBar() {
     setPanel(false)
   }, [loc.pathname])
 
+  // סגירה ב-Escape ובלחיצה מחוץ לתפריט
+  const menuRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!panel) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPanel(false)
+        btnRef.current?.focus()
+      }
+    }
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (!menuRef.current?.contains(t) && !btnRef.current?.contains(t)) setPanel(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [panel])
+
   const openPanel = async () => {
     setPanel((p) => !p)
     if (google === 'checking') setGoogle(await checkGoogle())
@@ -62,86 +85,107 @@ export function TopBar() {
 
   const cloudText = !userEmail ? 'שמור במכשיר' : cloud === 'syncing' ? 'מסנכרן' : cloud === 'error' ? 'שגיאת סנכרון' : 'שמור בענן'
 
+  const here = (path: string) => (path === '/' ? loc.pathname === '/' : loc.pathname.startsWith(path) || (path === '/projects' && loc.pathname.startsWith('/p/')))
+
   return (
     <header className="topbar">
       <Link to="/" className="brand" aria-label="Garden-GH, לדף הבית">
-        <img className="brand-logo" src="/logo-anat.png" alt="אד' ענת שטיבלמן" height={40} />
         <span className="brand-name">
           <b>Garden</b>-GH
         </span>
       </Link>
-      <nav className="row no-print" aria-label="ניווט ראשי" style={{ gap: 2 }}>
-        <Link className={`tab ${loc.pathname.startsWith('/projects') || loc.pathname.startsWith('/p/') ? 'active' : ''}`} to="/projects">
-          פרויקטים
-        </Link>
-        <Link className={`tab ${loc.pathname.startsWith('/prices') ? 'active' : ''}`} to="/prices">
-          מחירון
-        </Link>
-      </nav>
-      <div className="topbar-actions no-print">
-        <span className={`cloud-chip ${userEmail && cloud === 'synced' ? 'synced' : ''} ${cloud === 'error' ? 'error' : ''}`}>{cloudText}</span>
-        <button className="btn small" onClick={copyLink}>
-          העתקת קישור
-        </button>
-        <a className="btn small" href={DEV_CHAT_URL} target="_blank" rel="noreferrer">
-          שיחת הפיתוח
-        </a>
-        {RESEARCH_URL && (
-          <a className="btn small" href={RESEARCH_URL} target="_blank" rel="noreferrer">
-            פרויקט המחקר
-          </a>
-        )}
-        {installEvt && (
-          <button className="btn small primary" onClick={install}>
-            התקנת האפליקציה
-          </button>
-        )}
-        <button className="btn small" onClick={openPanel} aria-expanded={panel}>
-          {userEmail ? 'חשבון' : 'כניסה'}
-        </button>
-      </div>
+      <span className={`cloud-chip no-print ${userEmail && cloud === 'synced' ? 'synced' : ''} ${cloud === 'error' ? 'error' : ''}`}>{cloudText}</span>
+      <button
+        ref={btnRef}
+        className={`logo-btn no-print ${panel ? 'open' : ''}`}
+        onClick={openPanel}
+        aria-expanded={panel}
+        aria-haspopup="true"
+        aria-controls="system-menu"
+        aria-label="תפריט המערכת"
+        title="תפריט המערכת"
+      >
+        <img className="brand-logo" src="/logo-anat.png" alt="" height={40} />
+      </button>
       <AnimatePresence>
         {panel && (
           <motion.div
-            className="panel-under card"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+            ref={menuRef}
+            id="system-menu"
+            className="panel-under system-menu card"
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.18 }}
           >
-            {userEmail ? (
-              <div className="stack">
-                <div>
-                  <div className="eyebrow">מחוברת</div>
-                  <div style={{ overflowWrap: 'anywhere' }}>{userEmail}</div>
-                </div>
-                <div className="muted" style={{ fontSize: 14 }}>
-                  הפרויקטים והמחירון נשמרים בענן ונגישים מכל מכשיר.
-                </div>
-                <button className="btn" onClick={() => signOut().then(() => setPanel(false))}>
-                  יציאה
+            <div className="menu-head">
+              <img src="/logo-anat.png" alt="אד' ענת שטיבלמן" height={44} />
+              <span className={`cloud-chip ${userEmail && cloud === 'synced' ? 'synced' : ''} ${cloud === 'error' ? 'error' : ''}`}>{cloudText}</span>
+            </div>
+            <nav className="menu-group" aria-label="ניווט ראשי">
+              <Link className={`menu-item ${here('/') ? 'active' : ''}`} to="/">
+                דף הבית
+              </Link>
+              <Link className={`menu-item ${here('/projects') ? 'active' : ''}`} to="/projects">
+                פרויקטים
+              </Link>
+              <Link className={`menu-item ${here('/prices') ? 'active' : ''}`} to="/prices">
+                מחירון
+              </Link>
+            </nav>
+            <div className="menu-group">
+              <button className="menu-item" onClick={copyLink}>
+                העתקת קישור
+              </button>
+              <a className="menu-item" href={DEV_CHAT_URL} target="_blank" rel="noreferrer">
+                שיחת הפיתוח
+              </a>
+              {RESEARCH_URL && (
+                <a className="menu-item" href={RESEARCH_URL} target="_blank" rel="noreferrer">
+                  פרויקט המחקר
+                </a>
+              )}
+              {installEvt && (
+                <button className="menu-item strong" onClick={install}>
+                  התקנת האפליקציה
                 </button>
-              </div>
-            ) : (
-              <div className="stack">
-                <div className="h-section">שמירה בענן</div>
-                <div className="muted" style={{ fontSize: 14 }}>
-                  בלי כניסה, הכול נשמר במכשיר הזה בלבד. עם כניסה, הפרויקטים נשמרים בענן.
-                </div>
-                {!cloudConfigured ? (
-                  <div className="notice">חיבור הענן לא הוגדר בסביבה הזו. העבודה נשמרת במכשיר.</div>
-                ) : google === 'checking' ? (
-                  <div className="muted">בודקת זמינות כניסה</div>
-                ) : google === 'disabled' ? (
-                  <div className="notice">כניסה עם Google עדיין לא הופעלה בפרויקט Supabase. העבודה נשמרת במכשיר הזה בינתיים.</div>
-                ) : (
-                  <button className="btn primary" onClick={() => signInGoogle()}>
-                    כניסה עם Google
+              )}
+            </div>
+            <div className="menu-group account">
+              {userEmail ? (
+                <div className="stack" style={{ gap: 8 }}>
+                  <div>
+                    <div className="eyebrow">מחוברת</div>
+                    <div style={{ overflowWrap: 'anywhere' }}>{userEmail}</div>
+                  </div>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    הפרויקטים והמחירון נשמרים בענן ונגישים מכל מכשיר.
+                  </div>
+                  <button className="btn small" onClick={() => signOut().then(() => setPanel(false))}>
+                    יציאה
                   </button>
-                )}
-                {google === 'unknown' && <div className="muted" style={{ fontSize: 13 }}>לא ניתן היה לוודא שהכניסה פעילה. אפשר לנסות.</div>}
-              </div>
-            )}
+                </div>
+              ) : (
+                <div className="stack" style={{ gap: 8 }}>
+                  <div className="eyebrow">כניסה ושמירה בענן</div>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    בלי כניסה, הכול נשמר במכשיר הזה בלבד. עם כניסה, הפרויקטים נשמרים בענן.
+                  </div>
+                  {!cloudConfigured ? (
+                    <div className="notice">חיבור הענן לא הוגדר בסביבה הזו. העבודה נשמרת במכשיר.</div>
+                  ) : google === 'checking' ? (
+                    <div className="muted">בודקת זמינות כניסה</div>
+                  ) : google === 'disabled' ? (
+                    <div className="notice">כניסה עם Google עדיין לא הופעלה בפרויקט Supabase. העבודה נשמרת במכשיר הזה בינתיים.</div>
+                  ) : (
+                    <button className="btn small primary" onClick={() => signInGoogle()}>
+                      כניסה עם Google
+                    </button>
+                  )}
+                  {google === 'unknown' && <div className="muted" style={{ fontSize: 12 }}>לא ניתן היה לוודא שהכניסה פעילה. אפשר לנסות.</div>}
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

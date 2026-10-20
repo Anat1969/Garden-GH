@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { Element, PriceItem, Project, Requirements, ScaleInfo, Variant } from './types'
 import { getClient } from './supabase'
-import { deletePdf } from './idb'
+import { deleteDocBlob, deletePdf } from './idb'
 import { scaleElement } from './elementGeom'
 export { scaleElement }
 
@@ -175,6 +175,8 @@ export function setPlanScale(projectId: string, scale: ScaleInfo) {
 }
 
 export async function deleteProject(id: string) {
+  const docs = state.projects.find((p) => p.id === id)?.documents ?? []
+  docs.forEach((d) => deleteDocBlob(d.id).catch(() => undefined))
   set({ projects: state.projects.filter((p) => p.id !== id) })
   persistProjects()
   deletePdf(id).catch(() => undefined)

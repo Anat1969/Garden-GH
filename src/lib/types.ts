@@ -287,6 +287,27 @@ export interface Variant {
   assignments: Record<string, string>
 }
 
+// מסמך מצורף לפרויקט: כל סוג קובץ. הקובץ עצמו נשמר במכשיר (IndexedDB), כאן רק הפרטים
+export type DocKind = 'permit' | 'plan' | 'survey' | 'photo' | 'spec' | 'other'
+
+export const DOC_KIND_TEXT: Record<DocKind, string> = {
+  permit: 'היתר',
+  plan: 'תוכנית / שרטוט',
+  survey: 'מדידה',
+  photo: 'תמונה',
+  spec: 'מפרט / כתב כמויות',
+  other: 'אחר',
+}
+
+export interface ProjectDoc {
+  id: string
+  name: string
+  type: string
+  size: number
+  kind: DocKind
+  addedAt: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -295,6 +316,7 @@ export interface Project {
   soil: string
   levelsNote: string
   permit: Permit | null
+  documents?: ProjectDoc[]
   building?: Building
   variants: Variant[]
   activeVariantId: string

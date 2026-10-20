@@ -229,7 +229,7 @@ export default function ModelTab() {
   const selId = params.get('el')
   const names = useMemo(() => numberedNames(variant.elements), [variant.elements])
   const selected = variant.elements.find((e) => e.id === selId) ?? null
-  const [showDims, setShowDims] = useState(true)
+  const [showDims, setShowDims] = useState(false)
   const select = (id: string | null) => {
     const p = new URLSearchParams(params)
     if (id) p.set('el', id)
