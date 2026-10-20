@@ -1,5 +1,5 @@
 // דפים מהרשת (עם גיבוי מהמטמון), נכסים ותמונות מהמטמון.
-const CACHE = 'garden-gh-v1'
+const CACHE = 'garden-gh-v2'
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png']
 
 self.addEventListener('install', (e) => {

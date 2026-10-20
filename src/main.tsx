@@ -24,6 +24,13 @@ mergeDuplicateProjects()
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined)
+    // גרסה חדשה הופעלה: טעינה אחת מחדש כדי שלא יישארו קבצים ישנים
+    let reloaded = !navigator.serviceWorker.controller // בביקור הראשון אין מה לרענן
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return
+      reloaded = true
+      window.location.reload()
+    })
   })
 }
 

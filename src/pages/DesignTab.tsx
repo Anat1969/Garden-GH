@@ -214,7 +214,7 @@ export default function DesignTab() {
         <p className="muted" style={{ margin: '0 0 10px', fontSize: 14 }}>
           פרומפט שנבנה מהחלופה הפעילה: <b>החומרים והפריטים שבתוכנית</b>, הסגנון, והאור מדרום-מערב. מדביקים בכלי יצירת תמונות.
         </p>
-        <PromptBox prompt={projectPrompt(variant, STYLES.find((s) => s.id === variant.requirements.style) ?? style)} title={`פרומפט לחלופה "${variant.name}"`} />
+        <PromptBox prompt={projectPrompt(variant, STYLES.find((s) => s.id === variant.requirements.style) ?? style)} title={`פרומפט לחלופה "${variant.name}"`} imageKey={`project:${project.id}:${variant.id}`} />
       </section>
     </div>
   )

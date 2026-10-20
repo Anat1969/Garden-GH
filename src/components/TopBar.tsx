@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { IconBtn } from './EditIcons'
 import { AnimatePresence, motion } from 'framer-motion'
 import { signInGoogle, signOut, useApp } from '../lib/store'
 import { checkGoogle, cloudConfigured, type GoogleStatus } from '../lib/supabase'
@@ -15,6 +16,7 @@ interface BIPEvent extends Event {
 
 export function TopBar() {
   const loc = useLocation()
+  const nav = useNavigate()
   const userEmail = useApp((s) => s.userEmail)
   const cloud = useApp((s) => s.cloud)
   const [panel, setPanel] = useState(false)
@@ -89,6 +91,19 @@ export function TopBar() {
 
   return (
     <header className="topbar">
+      {loc.pathname !== '/' && (
+        <IconBtn
+          icon="back"
+          label="חזרה לדף הקודם"
+          iconOnly
+          className="back-btn no-print"
+          onClick={() => {
+            // יש היסטוריה בתוך האפליקציה: חוזרים אחורה. אחרת עולים רמה אחת
+            if ((window.history.state?.idx ?? 0) > 0) nav(-1)
+            else nav(loc.pathname.startsWith('/p/') ? '/projects' : '/')
+          }}
+        />
+      )}
       <Link to="/" className="brand" aria-label="תכנון גינה, לדף הבית">
         <img className="brand-icon" src="/icon.svg" alt="" width={36} height={36} />
         <span className="brand-name">
