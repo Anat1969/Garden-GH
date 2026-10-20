@@ -2,6 +2,19 @@ import type { Element, Fence, Opening, Project, Pt, Surface, SurfaceMaterial, Wa
 import { bbox, insetPolygon, pointInPoly, simplify } from './geom'
 
 export const STRUCT_SRC = 'קריאת מבנה'
+export const VECTOR_SRC = 'זיהוי וקטורי'
+
+// אלמנטים של הבית שנבנו אוטומטית (מזיהוי וקטורי או מקריאת מבנה). בנייה חוזרת מחליפה את כולם, כדי שלא ייווצר מודל על מודל
+export const isAutoHouse = (e: Element) =>
+  (e.source.includes(VECTOR_SRC) || e.source.startsWith(STRUCT_SRC)) && ((e.kind === 'wall' && e.scope === 'house') || e.kind === 'opening')
+
+// כשבונים מחדש מקריאת המבנה מוחלפים גם גבול המגרש ואזורי הגינה שנבנו ממנה. מה ששורטט ידנית נשאר
+export function replaceAuto(elements: Element[], fresh: Element[], alsoStructure: boolean): Element[] {
+  const drop = (e: Element) => isAutoHouse(e) || (alsoStructure && e.source.startsWith(STRUCT_SRC))
+  const keep = elements.filter((e) => !drop(e))
+  const ids = new Set(keep.map((e) => e.id))
+  return [...keep.filter((e) => e.kind !== 'opening' || ids.has(e.wallId)), ...fresh]
+}
 
 const MATERIAL: Record<string, SurfaceMaterial | null> = {
   lawn: 'lawn',

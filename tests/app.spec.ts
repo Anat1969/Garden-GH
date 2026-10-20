@@ -69,14 +69,14 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await page.getByLabel('קיבוץ לפי').selectOption('unit')
   await page.getByLabel('קיבוץ לפי').selectOption('')
   await page.screenshot({ path: 'shots/06a-prices-default.png', fullPage: true })
-  await page.getByRole('link', { name: /Garden-GH/ }).click()
+  await page.getByRole('link', { name: /תכנון גינה, לדף הבית/ }).click()
   await expect(page).toHaveURL(/\/$/)
 
   // פרויקט חדש
   await menu(page)
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()
   await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('גינת בדיקה')
-  await page.getByPlaceholder('רחוב, עיר').fill('הרצל 1, אשדוד')
+  await page.getByPlaceholder('רחוב, מספר, עיר').fill('הרצל 1, אשדוד')
   await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
   await expect(page).toHaveURL(/\/permit$/)
 
@@ -178,9 +178,18 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await page.screenshot({ path: 'shots/09-variants.png', fullPage: true })
 
   // סקירה
-  await page.getByRole('link', { name: 'סקירה' }).click()
-  await page.getByPlaceholder('פינת ישיבה, משחק לילדים, ערוגות ירק').fill('פינת ישיבה')
+  await page.getByRole('link', { name: 'פרטים ודרישות' }).click()
+  await page.getByRole('group', { name: 'פונקציות לגינה' }).getByLabel('פינת אוכל').check()
+  await page.getByRole('group', { name: 'צמחייה' }).getByLabel('חסכונית במים').check()
+  await page.getByLabel('פונקציות לגינה: עוד').fill('פינת קריאה')
   await expect(page.getByText('הצעד הבא').first()).toBeVisible()
+  // חלופות תכנון בסוף הדרישות: תכנון מאפס
+  await expect(page.getByTestId('variant-options')).toBeVisible()
+  await page.getByTestId('make-blank').click()
+  await expect(page).toHaveURL(/\/plan$/)
+  await page.getByRole('link', { name: 'פרטים ודרישות' }).click()
+  await expect(page.getByTestId('variant-options')).toContainText('תכנון מאפס')
+  await page.screenshot({ path: 'shots/10-overview.png', fullPage: true })
 
   // העתקת קישור
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
@@ -203,13 +212,16 @@ test('מובייל 390: בלי גלילה אופקית בכל הדפים', async
   await noHorizontalScroll(page)
   await page.screenshot({ path: 'shots/m-01-home.png', fullPage: true })
   await page.getByRole('button', { name: 'פרויקט חדש' }).first().click()
+  await expect(page).toHaveURL(/\/projects/)
+  await page.getByPlaceholder('רחוב, מספר, עיר').fill('הנרקיס 4, חיפה')
+  await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
   await expect(page).toHaveURL(/\/permit$/)
   await page.getByRole('button', { name: 'היתר לדוגמה' }).click()
   await expect(page.getByText('4 עמודים · וקטורי')).toBeVisible({ timeout: 30000 })
   await page.getByRole('button', { name: 'זיהוי אוטומטי' }).click()
   await page.getByRole('button', { name: 'לבדיקה ותיקון' }).click()
   await page.getByRole('button', { name: /אישור כל הקירות/ }).click()
-  for (const tab of ['סקירה', 'היתר', 'תוכנית ועריכה', 'מודל תלת-ממדי', 'כתב כמויות', 'שלבים ותקציב', 'חלופות']) {
+  for (const tab of ['פרטים ודרישות', 'היתר', 'תכנון הגינה', 'תוכנית ועריכה', 'מודל תלת-ממדי', 'כתב כמויות', 'שלבים ותקציב', 'חלופות']) {
     await page.getByRole('link', { name: tab, exact: true }).click()
     await page.waitForTimeout(700)
     await noHorizontalScroll(page)
@@ -246,6 +258,8 @@ test('ענן: סשן מזויף שולח שמירה ל-garden_projects', async (
   await expect(page.getByText('anat@example.com')).toBeVisible()
   await menu(page)
   await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('פרויקט ענן')
+
+  await page.getByPlaceholder('רחוב, מספר, עיר').fill('פרויקט ענן 1, תל אביב')
   await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
   await expect.poll(() => requests.some((r) => r.method === 'POST' && r.url.includes('/rest/v1/garden_projects') && (r.body ?? '').includes('פרויקט ענן'))).toBe(true)
   expect(requests.some((r) => r.method === 'GET' && r.url.includes('/rest/v1/garden_projects'))).toBe(true)

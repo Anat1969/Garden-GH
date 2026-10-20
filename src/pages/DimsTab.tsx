@@ -11,6 +11,7 @@ import type { DimScale, Label, Permit, PlanDimension } from '../lib/types'
 import { DRAWING_KIND_TEXT, PAGE_KIND_TEXT } from '../lib/types'
 import { Empty, ErrorState, Loading, NumField, Tag, toast } from '../components/ui'
 import { PageIntro } from '../components/PageIntro'
+import { IconBtn } from '../components/EditIcons'
 
 
 export const dimLabel = (d: PlanDimension): Label => (d.source === 'text-layer' || d.status === 'confirmed' ? 'measured' : 'estimated')
@@ -199,11 +200,12 @@ export default function DimsTab() {
         art="dims"
         compact
         title="המידות הכתובות הן הבסיס לכל מספר באפליקציה"
-        why={
-          <>
-            כאן קוראים את <b>המידות שכתובות בהיתר</b>, בודקים אותן מול <b>קווי המידה</b>, ומאשרים. מידה מאושרת הופכת ל<b>"מדוד מהיתר"</b> וקובעת את קנה המידה, את אורכי הקירות ואת הכמויות בכתב הכמויות.
-          </>
-        }
+        points={[
+          <>קוראים את <b>המידות שכתובות בהיתר</b>.</>,
+          <>בודקים כל מידה מול <b>קו המידה</b> שלה בשרטוט, ומאשרים.</>,
+          <>מידה מאושרת הופכת ל<b>"מדוד מהיתר"</b> וקובעת את קנה המידה, אורכי הקירות והכמויות.</>,
+        ]}
+        legend
         insights={[
           { k: 'מידות שנקראו', v: allDims.length },
           { k: 'מדודות או מאושרות', v: measuredCount, tone: measuredCount ? 'good' : 'warn', label: 'measured' },
@@ -255,16 +257,10 @@ export default function DimsTab() {
           )}
         </div>
         <div className="row" style={{ marginTop: 10 }}>
-          <button className="btn primary" disabled={!aiAvailable || !!busy || status !== 'ready'} onClick={() => runAi('normal')}>
-            קריאה חכמה
-          </button>
-          <button className="btn" disabled={!aiAvailable || !!busy || status !== 'ready'} onClick={() => runAi('fine')}>
-            קריאה מפורטת (אריחים)
-          </button>
+          <IconBtn icon="scan" label="קריאה חכמה" className="primary" disabled={!aiAvailable || !!busy || status !== 'ready'} onClick={() => runAi('normal')} />
+          <IconBtn icon="zoomIn" label="קריאה מפורטת (אריחים)" disabled={!aiAvailable || !!busy || status !== 'ready'} onClick={() => runAi('fine')} />
           {onPage.some((d) => d.status === 'pending' && d.confidence === 'high') && (
-            <button className="btn" onClick={confirmHigh}>
-              אישור המידות בביטחון גבוה
-            </button>
+            <IconBtn icon="approve" label="אישור המידות בביטחון גבוה" onClick={confirmHigh} />
           )}
           <span className="spacer" />
           <div className="row" role="radiogroup" aria-label="סינון" style={{ gap: 4 }}>
@@ -293,15 +289,11 @@ export default function DimsTab() {
               {onPage.length} מידות בעמוד · {onPage.filter((d) => d.status === 'confirmed' || d.source === 'text-layer').length} מדודות
             </span>
             <span className="spacer" />
-            <button className="btn small" onClick={() => zoom(1 / 1.3)}>
-              קרוב
-            </button>
-            <button className="btn small" onClick={() => zoom(1.3)}>
-              רחוק
-            </button>
-            <button className="btn small" onClick={() => setView(area)}>
-              התאמה
-            </button>
+            <span className="tool-group" role="group" aria-label="תצוגה">
+              <IconBtn icon="zoomIn" label="קרוב" iconOnly onClick={() => zoom(1 / 1.3)} />
+              <IconBtn icon="zoomOut" label="רחוק" iconOnly onClick={() => zoom(1.3)} />
+              <IconBtn icon="fit" label="התאמה" iconOnly onClick={() => setView(area)} />
+            </span>
           </div>
           <svg
             ref={svgRef}
@@ -495,22 +487,14 @@ function DimEditor({ d, onPatch, onZoom }: { d: PlanDimension; onPatch: (p: Part
       </div>
       <div className="row" style={{ marginTop: 12 }}>
         {d.status !== 'confirmed' && (
-          <button className="btn primary" onClick={() => onPatch({ status: 'confirmed' })}>
-            אישור
-          </button>
+          <IconBtn icon="approve" label="אישור" className="primary" onClick={() => onPatch({ status: 'confirmed' })} />
         )}
         {d.status !== 'rejected' ? (
-          <button className="btn danger" onClick={() => onPatch({ status: 'rejected' })}>
-            דחייה
-          </button>
+          <IconBtn icon="close" label="דחייה" className="danger" onClick={() => onPatch({ status: 'rejected' })} />
         ) : (
-          <button className="btn" onClick={() => onPatch({ status: 'pending' })}>
-            החזרה לבדיקה
-          </button>
+          <IconBtn icon="undo" label="החזרה לבדיקה" onClick={() => onPatch({ status: 'pending' })} />
         )}
-        <button className="btn ghost" onClick={onZoom}>
-          התמקדות
-        </button>
+        <IconBtn icon="focus" label="התמקדות" className="ghost" onClick={onZoom} />
       </div>
     </div>
   )

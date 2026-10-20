@@ -6,6 +6,7 @@ import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, computeBom, hasBasis, sumR
 import { LABEL_TEXT } from '../lib/types'
 import { PageIntro, type Insight } from '../components/PageIntro'
 import { DataTable } from '../components/DataTable'
+import { IconBtn } from '../components/EditIcons'
 import type { Label, PriceItem } from '../lib/types'
 import { UNIT_TEXT } from '../lib/types'
 import { Empty, Num, Tag } from '../components/ui'
@@ -93,11 +94,12 @@ export default function BomTab() {
       <PageIntro
         art="bom"
         title="כמה זה יעלה, ומה מייקר"
-        why={
-          <>
-            כתב הכמויות הופך כל <b>אלמנט בתוכנית</b> לשורת עבודה עם <b>כמות, סעיף מחירון וטווח עלות</b>. מתחילים מהתובנות למטה, ואז בודקים את השורות שמסומנות "הונח" או "מוערך". אפשר <b>לקבץ</b> לפי סעיף או שלב, <b>למיין</b> בכל עמודה ולסמן שורות לסיכום.
-          </>
-        }
+        points={[
+          <>כל <b>אלמנט בתוכנית</b> הופך לשורת עבודה: כמות, סעיף מחירון וטווח עלות.</>,
+          <>מתחילים מה<b>תובנות</b> למטה, ובודקים שורות שמסומנות "הונח" או "מוערך".</>,
+          <>אפשר <b>לקבץ</b> לפי סעיף או שלב, <b>למיין</b> בכל עמודה, ולסמן שורות לסיכום.</>,
+        ]}
+        legend
         insights={insights}
       />
       <div className="disclaimer">{DISCLAIMER}</div>
@@ -195,12 +197,8 @@ export default function BomTab() {
       )}
 
       <div className="row no-print">
-        <button className="btn" onClick={() => exportCsv(project.name, lines)} disabled={!lines.length}>
-          ייצוא CSV
-        </button>
-        <button className="btn" onClick={() => window.print()}>
-          הדפסה
-        </button>
+        <IconBtn icon="download" label="ייצוא CSV" onClick={() => exportCsv(project.name, lines)} disabled={!lines.length} />
+        <IconBtn icon="print" label="הדפסה" onClick={() => window.print()} />
       </div>
       <div className="muted" style={{ fontSize: 13 }}>
         טווח העלות משקלל את אי הוודאות בכמות (מדוד 3%, מוערך 10%, הונח 25%) ובמחיר (סעיף מאומת 5%, לא מאומת 20%).

@@ -12,12 +12,13 @@ import { PAGE_KIND_TEXT } from '../lib/types'
 import { NO_BASIS } from '../lib/bom'
 import { ErrorState, Loading, Rise, Tag, toast } from '../components/ui'
 import { PermitReader } from '../components/PermitReader'
+import { VECTOR_SRC, replaceAuto } from '../lib/structureToElements'
 import { ProjectDocs } from '../components/Documents'
+import { IconBtn } from '../components/EditIcons'
 import { PageIntro } from '../components/PageIntro'
 import { docFile } from '../lib/docs'
 import type { ProjectDoc } from '../lib/types'
 
-const VECTOR_SRC = 'זיהוי וקטורי'
 
 export default function PermitTab() {
   const { project, variant } = useProject()
@@ -179,11 +180,8 @@ export default function PermitTab() {
       const page = await doc.getPage(permit.planPage)
       const ex = await extractSegments(page)
       const det = detectWalls(ex, permit.scale.metersPerPt, uid, permit.planPage)
-      updateVariant(project.id, (v) => {
-        const keepIds = new Set(v.elements.filter((e) => !(e.source.includes(VECTOR_SRC) && !e.approved)).map((e) => e.id))
-        const kept = v.elements.filter((e) => keepIds.has(e.id) && !(e.kind === 'opening' && !keepIds.has(e.wallId)))
-        return { ...v, elements: [...kept, ...det.walls, ...det.openings] }
-      })
+      // זיהוי חוזר מחליף את כל קירות הבית שזוהו אוטומטית, גם מקריאת מבנה: בית אחד, לא בית על בית
+      updateVariant(project.id, (v) => ({ ...v, elements: replaceAuto(v.elements, [...det.walls, ...det.openings], false) }))
       setPermit((p) => ({ ...p, detectedAt: new Date().toISOString(), detection: { walls: det.walls.length, openings: det.openings.length } }))
       setResult({ walls: det.walls.length, openings: det.openings.length })
     } catch (e) {
@@ -203,11 +201,13 @@ export default function PermitTab() {
         art="permit"
         compact
         title="ההיתר הוא מקור האמת של הבית והמגרש"
-        why={
-          <>
-            מעלים את <b>ההיתר</b>: PDF, סריקה או תמונה. האפליקציה מזהה <b>עמודים ושרטוטים</b>, <b>קנה מידה</b>, קירות ופתחים, ומשם נבנים התוכנית, המודל והכמויות. כל מה שזוהה נשאר <b>"מוערך"</b> עד שמאשרים.
-          </>
-        }
+        points={[
+          <>מעלים את <b>ההיתר</b>: PDF, סריקה או תמונה.</>,
+          <>האפליקציה מזהה <b>שרטוטים, קנה מידה, קירות ופתחים</b>.</>,
+          <>מזה נבנים התוכנית, המודל והכמויות.</>,
+          <>כל מה שזוהה מסומן <b>"מוערך"</b> עד שמאשרים אותו.</>,
+        ]}
+        legend
         insights={
           permit
             ? [
@@ -259,9 +259,7 @@ export default function PermitTab() {
           >
             <div className="h-section">גוררים לכאן PDF או תמונה</div>
             <div className="row" style={{ justifyContent: 'center' }}>
-              <button className="btn primary" onClick={() => fileRef.current?.click()}>
-                בחירת קובץ
-              </button>
+              <IconBtn icon="upload" label="בחירת קובץ" className="primary" onClick={() => fileRef.current?.click()} />
               <button className="btn" onClick={() => loadSample('pdf')}>
                 היתר לדוגמה
               </button>

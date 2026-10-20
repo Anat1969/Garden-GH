@@ -3,6 +3,7 @@ import { defaultPrices, setPrices, useApp } from '../lib/store'
 import { DEKEL_DATE, DEKEL_SOURCES } from '../data/dekelPrices'
 import { PageIntro } from '../components/PageIntro'
 import { DataTable } from '../components/DataTable'
+import { IconBtn } from '../components/EditIcons'
 import type { PriceItem } from '../lib/types'
 import { CSV_HEADER, SAMPLE_CSV, parsePriceCsv } from '../lib/csv'
 import { CATEGORY_TEXT, DISCLAIMER, type Category } from '../lib/bom'
@@ -49,11 +50,13 @@ export default function Prices() {
       <PageIntro
         art="prices"
         title="המחירון קובע את טווח העלות של כל שורה בכתב הכמויות"
-        why={
-          <>
-            כל סעיף מקושר ל<b>קטגוריה</b>, והקטגוריה מחברת אותו לשורות בכתב הכמויות. כברירת מחדל נטענת <b>טבלת גינון ופיתוח נוף ממקורות ציבוריים</b> (מכרזים שמצטטים את מחירון דקל ומחירי שוק). היא <b>לא מאומתת</b> מול מחירון דקל המלא, ולכן כל מחיר מסומן "הונח". מחירון דקל מעודכן נטען כקובץ CSV.
-          </>
-        }
+        points={[
+          <>כל סעיף מקושר ל<b>קטגוריה</b>, והקטגוריה מחברת אותו לשורות בכתב הכמויות.</>,
+          <>כברירת מחדל נטענת <b>טבלה ממקורות ציבוריים</b>: מכרזים שמצטטים את מחירון דקל, ומחירי שוק.</>,
+          <>הטבלה <b>לא מאומתת</b> מול מחירון דקל המלא, ולכן כל מחיר מסומן "הונח".</>,
+          <>מחירון דקל מעודכן נטען כקובץ CSV.</>,
+        ]}
+        legend
         insights={[
           { k: 'סעיפים', v: prices.length },
           { k: 'קטגוריות מכוסות', v: `${new Set(prices.map((p) => p.category)).size} מתוך ${Object.keys(CATEGORY_TEXT).length}`, tone: new Set(prices.map((p) => p.category)).size >= Object.keys(CATEGORY_TEXT).length ? 'good' : 'warn' },
@@ -65,12 +68,8 @@ export default function Prices() {
 
       <div className="card">
         <div className="row">
-          <button className="btn primary" onClick={() => fileRef.current?.click()}>
-            טעינת קובץ CSV
-          </button>
-          <button className="btn" onClick={downloadTemplate}>
-            הורדת תבנית
-          </button>
+          <IconBtn icon="upload" label="טעינת קובץ CSV" className="primary" onClick={() => fileRef.current?.click()} />
+          <IconBtn icon="download" label="הורדת תבנית" onClick={downloadTemplate} />
           <button
             className="btn"
             onClick={() => {

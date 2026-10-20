@@ -3,7 +3,7 @@ import type { Element, PriceItem, Project, Requirements, ScaleInfo, Variant } fr
 import { getClient } from './supabase'
 import { parsePriceCsv } from './csv'
 import { DEKEL_CSV } from '../data/dekelPrices'
-import { deleteDocBlob, deletePdf } from './idb'
+import { deleteDocBlob, deletePdf, loadPdf, savePdf } from './idb'
 import { scaleElement } from './elementGeom'
 export { scaleElement }
 
@@ -33,11 +33,27 @@ function readLS<T>(key: string, fallback: T): T {
   }
 }
 
+export const MAIN_VARIANT = 'חלופה ראשית'
+
+// שמות ישנים: "בסיס" היה שם החלופה הראשונה
+function normalizeProjects(list: Project[]): Project[] {
+  return list.map((p) => ({ ...p, variants: p.variants.map((v) => (v.name === 'בסיס' ? { ...v, name: MAIN_VARIANT } : v)) }))
+}
+
+// כתובת מנורמלת: בלי רווחים כפולים, פיסוק וגרשיים, כדי ש"הרצל 1, אשדוד" ו"הרצל 1 אשדוד" יהיו אותו פרויקט
+export const normAddr = (s: string) => s.toLowerCase().replace(/["'״׳.,\-]/g, ' ').replace(/\s+/g, ' ').trim()
+const projectKey = (p: Project) => (normAddr(p.address) ? `a:${normAddr(p.address)}` : `n:${normAddr(p.name)}`)
+
+export function findProjectByAddress(address: string): Project | undefined {
+  const k = normAddr(address)
+  return k ? state.projects.find((p) => normAddr(p.address) === k) : undefined
+}
+
 // מחירון ברירת מחדל: טבלת גינון ופיתוח נוף ממקורות ציבוריים (src/data/dekelPrices.ts), עד שנטען מחירון אחר
 export const defaultPrices = (): PriceItem[] => parsePriceCsv(DEKEL_CSV).items
 
 let state: AppState = {
-  projects: readLS<Project[]>(LS_PROJECTS, []),
+  projects: normalizeProjects(readLS<Project[]>(LS_PROJECTS, [])),
   prices: readLS<PriceItem[] | null>(LS_PRICES, null) ?? defaultPrices(),
   userEmail: null,
   userId: null,
@@ -105,7 +121,7 @@ export function newVariant(name: string, from?: Variant): Variant {
 }
 
 export function createProject(name: string, address: string): Project {
-  const base = newVariant('בסיס')
+  const base = newVariant(MAIN_VARIANT)
   const now = new Date().toISOString()
   const p: Project = {
     id: uid(),
@@ -231,6 +247,62 @@ export function setPlanScale(projectId: string, scale: ScaleInfo) {
   })
 }
 
+// כל כתובת היא פרויקט אחד: פרויקטים כפולים (אותה כתובת, או אותו שם בלי כתובת) מתאחדים לפרויקט הוותיק,
+// והחלופות, המסמכים וההיתר שלהם עוברים אליו. מחזיר כמה פרויקטים אוחדו.
+export function mergeDuplicateProjects(): number {
+  const groups = new Map<string, Project[]>()
+  for (const p of state.projects) groups.set(projectKey(p), [...(groups.get(projectKey(p)) ?? []), p])
+  let merged = 0
+  const removed: string[] = []
+  let projects = state.projects
+  for (const list of groups.values()) {
+    if (list.length < 2) continue
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    let target = sorted[0]
+    const seen = new Set(target.variants.map((v) => JSON.stringify(v.elements)))
+    for (const o of sorted.slice(1)) {
+      const names = new Set(target.variants.map((v) => v.name))
+      const extra = o.variants
+        .filter((v) => !seen.has(JSON.stringify(v.elements)))
+        .map((v) => {
+          seen.add(JSON.stringify(v.elements))
+          let name = v.name
+          let i = 2
+          while (names.has(name)) name = `${v.name} (${i++})`
+          names.add(name)
+          return { ...v, name }
+        })
+      const takePermit = !target.permit && o.permit
+      if (takePermit) {
+        const from = o.id
+        const to = target.id
+        void loadPdf(from).then((b) => b && savePdf(to, b)).catch(() => undefined)
+      }
+      target = {
+        ...target,
+        variants: [...target.variants, ...extra],
+        documents: [...(target.documents ?? []), ...(o.documents ?? []).filter((d) => !(target.documents ?? []).some((x) => x.id === d.id))],
+        permit: target.permit ?? o.permit,
+        building: target.building ?? o.building,
+        address: target.address || o.address,
+        updatedAt: new Date().toISOString(),
+      }
+      removed.push(o.id)
+      merged++
+    }
+    projects = projects.map((p) => (p.id === target.id ? target : p))
+  }
+  if (!merged) return 0
+  set({ projects: projects.filter((p) => !removed.includes(p.id)) })
+  persistProjects()
+  void (async () => {
+    const client = await getClient()
+    if (client && state.userId) for (const id of removed) await client.from('garden_projects').delete().eq('id', id)
+    for (const p of state.projects) queueCloudSave(p.id)
+  })()
+  return merged
+}
+
 export async function deleteProject(id: string) {
   const docs = state.projects.find((p) => p.id === id)?.documents ?? []
   docs.forEach((d) => deleteDocBlob(d.id).catch(() => undefined))
@@ -350,7 +422,8 @@ async function pullAll() {
       await pushPrices()
     }
   }
-  set({ cloud: 'synced' })
+  set({ cloud: 'synced', projects: normalizeProjects(state.projects) })
+  mergeDuplicateProjects()
 }
 
 export async function initAuth() {

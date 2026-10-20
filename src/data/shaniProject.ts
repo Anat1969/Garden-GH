@@ -115,7 +115,7 @@ export const SHANI_FLAG = 'garden-gh:shani-seeded'
 
 export function buildShaniProject(): Project {
   const now = new Date().toISOString()
-  const base = newVariant('בסיס')
+  const base = newVariant('חלופה ראשית')
   base.requirements = {
     functions: 'תכנון הגינה הדרום-מערבית של היחידה המערבית: פינת ישיבה, צל, מעבר לרחוב',
     plants: 'ים-תיכונית, חסכונית במים',
@@ -131,6 +131,8 @@ export function buildShaniProject(): Project {
     north: 315,
     soil: '',
     levelsNote: '±0.00 = 699.00. גינה דרומית 698.85, דשא 699.25, רחוב 694.21-694.30',
+    baseLevel: 699,
+    extracted: { north: 'מחץ הצפון בתוכנית', levelsNote: 'מסימוני הגובה בהיתר', baseLevel: 'מהחתכים והחזיתות' },
     permit: {
       fileName: 'היתר סרוק (לא מצורף לאפליקציה)',
       declaredType: 'scan',

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { addProject, createProject, deleteProject, updateProject, useApp } from '../lib/store'
+import { addProject, createProject, deleteProject, findProjectByAddress, newVariant, updateProject, useApp } from '../lib/store'
 import type { Project } from '../lib/types'
 import { buildShaniProject } from '../data/shaniProject'
-import { Empty, Loading, Rise, toast } from '../components/ui'
+import { Empty, Field, Loading, Rise, toast } from '../components/ui'
 import { DraftDocs, type DraftDoc } from '../components/Documents'
 import { PlanThumb } from '../components/PlanThumb'
+import { IconBtn } from '../components/EditIcons'
 import { PageIntro } from '../components/PageIntro'
 import { addDocuments, readableAsPermit } from '../lib/docs'
 
@@ -66,26 +67,32 @@ function ProjectCard({ p, delay }: { p: Project; delay: number }) {
             {p.address || 'כתובת לא הוזנה'}
           </div>
           <div className="muted" style={{ fontSize: 14 }}>
-            {p.permit ? `היתר: ${p.permit.fileName}` : 'עוד לא הועלה היתר'} · {p.variants.length} חלופות{docs ? ` · ${docs} מסמכים` : ''}
+            {p.permit ? `היתר: ${p.permit.fileName}` : 'עוד לא הועלה היתר'}
+            {docs ? ` · ${docs} מסמכים` : ''}
+          </div>
+          <div className="variant-chips" aria-label="חלופות">
+            {p.variants.map((v) => (
+              <span key={v.id} className={`vchip ${v.id === p.activeVariantId ? 'on' : ''}`}>
+                {v.name}
+              </span>
+            ))}
           </div>
           <div className="row" style={{ marginTop: 12 }}>
             <Link className="btn small primary" to={`/p/${p.id}`}>
               פתיחה
             </Link>
-            <button className="btn small" onClick={() => setEdit(true)}>
-              עריכה
-            </button>
-            <button
-              className="btn small danger"
+            <IconBtn icon="edit" label="עריכה" onClick={() => setEdit(true)} />
+            <IconBtn
+              icon="delete"
+              label="מחיקה"
+              className="danger"
               onClick={() => {
                 if (window.confirm(`למחוק את "${p.name}"? לא ניתן לשחזר.`)) {
                   void deleteProject(p.id)
                   toast('הפרויקט נמחק')
                 }
               }}
-            >
-              מחיקה
-            </button>
+            />
           </div>
         </>
       )}
@@ -107,7 +114,22 @@ export default function Projects() {
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault()
-    const p = createProject(name.trim() || 'פרויקט חדש', address.trim())
+    if (!address.trim()) {
+      toast('כתובת היא שדה חובה: כל כתובת היא פרויקט אחד')
+      return
+    }
+    // כתובת קיימת: לא יוצרים פרויקט כפול. מוסיפים חלופה חדשה בפרויקט הקיים
+    const existing = findProjectByAddress(address)
+    if (existing) {
+      if (!window.confirm(`בכתובת הזו כבר קיים הפרויקט "${existing.name}". לפתוח אותו ולהוסיף בו חלופה חדשה?`)) return
+      const v = newVariant(`חלופה ${existing.variants.length + 1}`, existing.variants.find((x) => x.id === existing.activeVariantId))
+      updateProject(existing.id, (x) => ({ ...x, variants: [...x.variants, v], activeVariantId: v.id }))
+      if (drafts.length) await addDocuments(existing.id, drafts.map((d) => ({ file: d.file, kind: d.kind })))
+      toast(`נוספה "${v.name}" לפרויקט הקיים`)
+      nav(`/p/${existing.id}`)
+      return
+    }
+    const p = createProject(name.trim() || address.trim(), address.trim())
     let auto: string | null = null
     if (drafts.length) {
       setSaving(true)
@@ -134,11 +156,11 @@ export default function Projects() {
       <PageIntro
         art="projects"
         title="כל גינה היא פרויקט: היתר, מסמכים, תכנון וחלופות"
-        why={
-          <>
-            יוצרים פרויקט עם <b>מסמכים מכל סוג</b>, וההיתר נקרא אוטומטית. בכל כרטיס רואים את <b>תוכנית הבית והגינה</b>, ואפשר <b>לערוך או למחוק</b>.
-          </>
-        }
+        points={[
+          <>כל <b>כתובת</b> היא פרויקט אחד. כתובת קיימת פותחת את הפרויקט הקיים ומוסיפה בו חלופה.</>,
+          <>בפרויקט חדש מעלים <b>מסמכים מכל סוג</b>, וההיתר נקרא אוטומטית.</>,
+          <>בכל כרטיס רואים את <b>תוכנית הבית והגינה</b>, ואפשר לערוך או למחוק.</>,
+        ]}
         insights={[
           { k: 'פרויקטים', v: projects.length },
           { k: 'עם היתר', v: projects.filter((p) => p.permit).length },
@@ -151,18 +173,15 @@ export default function Projects() {
           פרויקט חדש
         </div>
         <div className="form-grid">
-          <label className="field">
-            <span>שם הפרויקט</span>
+          <Field label="כתובת" required hint="כל כתובת היא פרויקט אחד. כתובת קיימת תוסיף חלופה לפרויקט הקיים.">
+            <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="רחוב, מספר, עיר" required autoFocus={window.location.hash === '#new'} />
+          </Field>
+          <Field label="שם הפרויקט" hint="בלי שם: הכתובת היא השם.">
             <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="למשל: גינת משפחת לוי" />
-          </label>
-          <label className="field">
-            <span>כתובת</span>
-            <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="רחוב, עיר" />
-          </label>
-          <div className="field" style={{ gridColumn: '1 / -1' }}>
-            <span>מסמכים לפרויקט</span>
+          </Field>
+          <Field label="מסמכים לפרויקט" wide>
             <DraftDocs docs={drafts} setDocs={setDrafts} />
-          </div>
+          </Field>
           <div className="field" style={{ alignSelf: 'end' }}>
             <button className="btn primary" type="submit" disabled={saving}>
               {saving ? 'שומרת מסמכים' : 'יצירה והמשך להיתר'}
@@ -173,6 +192,11 @@ export default function Projects() {
               className="btn"
               type="button"
               onClick={() => {
+                const ex = projects.find((x) => x.name === 'הבית של שני')
+                if (ex) {
+                  nav(`/p/${ex.id}/model`)
+                  return
+                }
                 const p = buildShaniProject()
                 addProject(p)
                 nav(`/p/${p.id}/model`)

@@ -10,6 +10,8 @@ test('פרויקטים: מסמכים מכל סוג, קריאה אוטומטית 
 
   // פרויקט חדש עם מסמכים: היתר PDF, תמונה, קובץ DWG וקובץ טקסט, ואז הסרה של אחד
   await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('גינת מסמכים')
+
+  await page.getByPlaceholder('רחוב, מספר, עיר').fill('גינת מסמכים 1, תל אביב')
   await page.getByTestId('doc-input').setInputFiles([
     { name: 'היתר בנייה.pdf', mimeType: 'application/pdf', buffer: readFileSync('public/sample-permit.pdf') },
     { name: 'צילום חצר.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/sample-scan.jpg') },

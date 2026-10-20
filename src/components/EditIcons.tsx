@@ -117,6 +117,67 @@ export const EDIT_ICONS = {
       <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
     </>
   ),
+  layers: (
+    <>
+      <path d="M12 4l8 4-8 4-8-4z" />
+      <path d="M4 12l8 4 8-4M4 16l8 4 8-4" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 16V4M7.5 8.5L12 4l4.5 4.5" />
+      <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 4v12M7.5 11.5L12 16l4.5-4.5" />
+      <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+    </>
+  ),
+  print: (
+    <>
+      <path d="M7 9V4h10v5" />
+      <rect x="4" y="9" width="16" height="7" rx="1.5" />
+      <path d="M7 14h10v6H7z" />
+    </>
+  ),
+  focus: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" />
+    </>
+  ),
+  scan: (
+    <>
+      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" />
+      <path d="M4 12h16" />
+    </>
+  ),
+  heights: (
+    <>
+      <path d="M6 20V8l6-4 6 4v12" />
+      <path d="M3 20h18M15 11h5M15 15h5" />
+    </>
+  ),
+  build: (
+    <>
+      <path d="M4 20V10l8-6 8 6v10z" />
+      <path d="M9 20v-6h6v6" />
+    </>
+  ),
+  open: (
+    <>
+      <path d="M14 4h6v6M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v5M12 8v.01" />
+    </>
+  ),
 } as const
 
 export type EditIconId = keyof typeof EDIT_ICONS

@@ -312,3 +312,48 @@ export function rotateElement(e: Element, deg: number): Element {
       return e
   }
 }
+
+// ---------- ידיות עריכה ----------
+
+// נקודות הידיות של אלמנט: קודקודי משטח, נקודות קו, קצוות קיר וגדר, ופינת שינוי גודל לפריט
+export function handlePoints(e: Element): Pt[] {
+  switch (e.kind) {
+    case 'surface':
+      return surfacePoly(e)
+    case 'line':
+    case 'sketch':
+      return e.pts
+    case 'wall':
+    case 'fence':
+      return [
+        { x: e.x1, y: e.y1 },
+        { x: e.x2, y: e.y2 },
+      ]
+    case 'object':
+      return [{ x: e.x + e.w / 2, y: e.y + e.d / 2 }]
+    default:
+      return []
+  }
+}
+
+const r2 = (v: number) => Math.round(v * 100) / 100
+
+export function setVertex(e: Element, i: number, p: Pt): Element {
+  const q = { x: r2(p.x), y: r2(p.y) }
+  switch (e.kind) {
+    case 'surface': {
+      const poly = surfacePoly(e).map((v, j) => (j === i ? q : v))
+      return withPoly(e, poly)
+    }
+    case 'line':
+    case 'sketch':
+      return { ...e, pts: e.pts.map((v, j) => (j === i ? q : v)) }
+    case 'wall':
+    case 'fence':
+      return i === 0 ? { ...e, x1: q.x, y1: q.y } : { ...e, x2: q.x, y2: q.y }
+    case 'object':
+      return { ...e, w: Math.max(0.1, r2(Math.abs(q.x - e.x) * 2)), d: Math.max(0.1, r2(Math.abs(q.y - e.y) * 2)) }
+    default:
+      return e
+  }
+}
