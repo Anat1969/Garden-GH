@@ -119,6 +119,12 @@ export function createProject(name: string, address: string): Project {
   return p
 }
 
+export function addProject(p: Project) {
+  set({ projects: [p, ...state.projects] })
+  persistProjects()
+  queueCloudSave(p.id)
+}
+
 export function updateProject(id: string, fn: (p: Project) => Project) {
   const projects = state.projects.map((p) => (p.id === id ? { ...fn(p), updatedAt: new Date().toISOString() } : p))
   set({ projects })
