@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { createProject, deleteProject, useApp } from '../lib/store'
+import { addProject, createProject, deleteProject, useApp } from '../lib/store'
+import { buildShaniProject } from '../data/shaniProject'
 import { Empty, Loading, Rise, toast } from '../components/ui'
 
 export default function Projects() {
@@ -44,6 +45,19 @@ export default function Projects() {
           <div className="field" style={{ alignSelf: 'end' }}>
             <button className="btn primary" type="submit">
               יצירה והמשך להיתר
+            </button>
+          </div>
+          <div className="field" style={{ alignSelf: 'end' }}>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => {
+                const p = buildShaniProject()
+                addProject(p)
+                nav(`/p/${p.id}/model`)
+              }}
+            >
+              פרויקט לדוגמה: הבית של שני
             </button>
           </div>
         </div>

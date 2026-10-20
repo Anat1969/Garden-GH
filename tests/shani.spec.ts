@@ -1,0 +1,36 @@
+import { test, expect } from '@playwright/test'
+
+test('הפרויקט של שני נוצר אוטומטית, עם מודל, מידות וכתב כמויות', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.route(/supabase\.co/, (r) => r.fulfill({ json: [] }))
+  await page.setViewportSize({ width: 1366, height: 900 })
+  await page.goto('/projects')
+  await expect(page.getByRole('img', { name: "אד' ענת שטיבלמן" })).toBeVisible()
+  const card = page.locator('.grid-cards .card').filter({ hasText: 'הבית של שני' })
+  await expect(card).toHaveCount(1)
+  await card.getByRole('link', { name: 'פתיחה' }).click()
+  await expect(page.getByRole('heading', { name: 'הבית של שני' })).toBeVisible()
+  await expect(page.getByText('מהמידות')).toBeVisible()
+  await page.getByRole('link', { name: 'תוכנית ועריכה' }).click()
+  await expect(page.locator('.el-item').filter({ hasText: 'קיר בית' }).first()).toBeVisible()
+  await page.waitForTimeout(600)
+  await page.screenshot({ path: 'shots/16-shani-plan.png' })
+  await page.getByRole('link', { name: 'מודל תלת-ממדי' }).click()
+  await expect(page.getByTestId('model-canvas').locator('canvas')).toBeVisible({ timeout: 20000 })
+  await page.waitForTimeout(2500)
+  await page.screenshot({ path: 'shots/17-shani-model.png' })
+  await page.getByRole('link', { name: 'כתב כמויות' }).click()
+  await expect(page.getByText('דשא 1').first()).toBeVisible()
+  // יצירה חוזרת מהכפתור
+  await page.getByRole('link', { name: 'פרויקטים' }).first().click()
+  await page.getByRole('button', { name: 'פרויקט לדוגמה: הבית של שני' }).click()
+  await expect(page).toHaveURL(/\/model$/)
+  // לוגו בנייד בלי גלילה אופקית
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  expect(over).toBeLessThanOrEqual(1)
+  await page.screenshot({ path: 'shots/m-logo.png' })
+  expect(errors).toEqual([])
+})

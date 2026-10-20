@@ -184,7 +184,7 @@ function DimLabels({ elements, k }: { elements: Element[]; k: number }) {
       {elements.map((e) => {
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          if (L < 0.8) return null
+          if (L < 2.5 || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
           return <Label3D key={e.id} text={`${fmtNum(L)} מ' · ${LABEL_TEXT[e.label]}`} position={[(e.x1 + e.x2) / 2, e.height + k, (e.y1 + e.y2) / 2]} size={k} />
         }
         if (e.kind === 'surface') {

@@ -65,7 +65,7 @@ export function TopBar() {
   return (
     <header className="topbar">
       <Link to="/" className="brand" aria-label="Garden-GH, לדף הבית">
-        <img src="/icon.svg" alt="" width={30} height={30} />
+        <img className="brand-logo" src="/logo-anat.png" alt="אד' ענת שטיבלמן" height={40} />
         <span className="brand-name">
           <b>Garden</b>-GH
         </span>
