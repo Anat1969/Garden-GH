@@ -13,6 +13,7 @@ import { NO_BASIS } from '../lib/bom'
 import { ErrorState, Loading, Rise, Tag, toast } from '../components/ui'
 import { PermitReader } from '../components/PermitReader'
 import { ProjectDocs } from '../components/Documents'
+import { PageIntro } from '../components/PageIntro'
 import { docFile } from '../lib/docs'
 import type { ProjectDoc } from '../lib/types'
 
@@ -198,6 +199,26 @@ export default function PermitTab() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
+      <PageIntro
+        art="permit"
+        compact
+        title="ההיתר הוא מקור האמת של הבית והמגרש"
+        why={
+          <>
+            מעלים את <b>ההיתר</b>: PDF, סריקה או תמונה. האפליקציה מזהה <b>עמודים ושרטוטים</b>, <b>קנה מידה</b>, קירות ופתחים, ומשם נבנים התוכנית, המודל והכמויות. כל מה שזוהה נשאר <b>"מוערך"</b> עד שמאשרים.
+          </>
+        }
+        insights={
+          permit
+            ? [
+                { k: 'קובץ', v: permit.fileName.length > 22 ? permit.fileName.slice(0, 20) + '…' : permit.fileName },
+                { k: 'עמודים', v: permit.pageCount },
+                { k: 'קנה מידה', v: permit.scale.den ? `1:${permit.scale.den}` : permit.scale.metersPerPt ? 'מכויל' : 'חסר', tone: permit.scale.metersPerPt ? 'good' : 'warn', label: permit.scale.source === 'text' || permit.scale.source === 'dimensions' ? 'measured' : permit.scale.metersPerPt ? 'estimated' : undefined },
+                { k: 'מסמכים בפרויקט', v: project.documents?.length ?? 0 },
+              ]
+            : [{ k: 'מצב', v: 'עוד לא הועלה היתר', tone: 'warn' }]
+        }
+      />
       {error && <div className="notice danger">{error}</div>}
       {busy && (
         <div className="card flat">

@@ -111,8 +111,9 @@ test('ספריית הגינה: פריטים, משטח מצולע וחופשי, �
   // כתב כמויות כולל את הפריטים
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
   await expect(page.getByText('הערכה בלבד עד לאישור מול מחירון מעודכן וספק.').first()).toBeVisible()
-  await expect(page.getByText('פרגולה').first()).toBeVisible()
-  await expect(page.getByText('גדר חיה').first()).toBeVisible()
+  await page.getByTestId('bom-table').getByLabel('קיבוץ לפי').selectOption('')
+  await expect(page.getByTestId('bom-table').getByRole('cell', { name: /פרגולה/ }).first()).toBeVisible()
+  await expect(page.getByTestId('bom-table').getByRole('cell', { name: /גדר חיה/ }).first()).toBeVisible()
 
   // נייד: ספרייה בלי גלילה אופקית
   await page.setViewportSize({ width: 390, height: 844 })

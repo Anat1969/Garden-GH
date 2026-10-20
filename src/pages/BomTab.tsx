@@ -2,10 +2,19 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { useApp, updateVariant } from '../lib/store'
-import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, computeBom, hasBasis, sumRange, fmtMoney, type BomLine } from '../lib/bom'
+import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, computeBom, hasBasis, sumRange, fmtMoney, type BomLine } from '../lib/bom'
+import { LABEL_TEXT } from '../lib/types'
+import { PageIntro, type Insight } from '../components/PageIntro'
+import { DataTable } from '../components/DataTable'
 import type { Label, PriceItem } from '../lib/types'
 import { UNIT_TEXT } from '../lib/types'
 import { Empty, Num, Tag } from '../components/ui'
+
+const phaseOf = (l: BomLine) => PHASES.find((p) => p.categories.includes(l.category))?.name ?? 'אחר'
+const rangeSum = (rs: BomLine[]) => {
+  const r = sumRange(rs)
+  return r.max > 0 ? <span className="num">{fmtMoney(r.min)} עד {fmtMoney(r.max)}</span> : null
+}
 
 export const priceLabel = (i: PriceItem): Label => (i.verified ? 'estimated' : 'assumed')
 const RANK: Record<Label, number> = { measured: 0, estimated: 1, assumed: 2 }
@@ -65,8 +74,32 @@ export default function BomTab() {
 
   const houseCount = variant.elements.filter((e) => e.kind === 'wall' && e.scope === 'house').length
 
+  // תובנות לראש העמוד: טווח כולל, מה מייקר, ועד כמה הכמויות מדודות
+  const byCat = new Map<string, number>()
+  for (const l of lines) if (l.max) byCat.set(CATEGORY_TEXT[l.category], (byCat.get(CATEGORY_TEXT[l.category]) ?? 0) + l.max)
+  const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+  const measured = lines.filter((l) => l.qtyLabel === 'measured').length
+  const insights: Insight[] = [
+    { k: 'טווח עלות כולל', v: sum.max ? `${fmtMoney(sum.min)} עד ${fmtMoney(sum.max)}` : 'אין מחירים', label: sum.max ? (lines.some((l) => l.item && lineLabel(l) === 'assumed') ? 'assumed' : 'estimated') : undefined },
+    { k: 'מה הכי מייקר', v: top.length ? top[0][0] : 'אין', note: top.length ? top.map(([c, v]) => `${c} עד ${fmtMoney(v)}${sum.max ? ` (${Math.round((v / sum.max) * 100)}%)` : ''}`).join(' · ') : undefined },
+    { k: 'כמויות מדודות מהיתר', v: `${measured} מתוך ${lines.length}`, tone: lines.length && measured / lines.length >= 0.6 ? 'good' : 'warn', note: 'השאר מוערך או הונח' },
+  ]
+  if (sum.missing) insights.push({ k: 'שורות בלי מחיר', v: sum.missing, tone: 'warn' })
+  if (budget !== null && sum.max)
+    insights.push({ k: 'מול תקציב הלקוח', v: fmtMoney(budget), tone: sum.max <= budget ? 'good' : sum.min > budget ? 'bad' : 'warn', note: sum.max <= budget ? 'גם הטווח העליון בתוך התקציב' : sum.min > budget ? 'גם הטווח התחתון חורג' : 'סיכון לחריגה' })
+
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <PageIntro
+        art="bom"
+        title="כמה זה יעלה, ומה מייקר"
+        why={
+          <>
+            כתב הכמויות הופך כל <b>אלמנט בתוכנית</b> לשורת עבודה עם <b>כמות, סעיף מחירון וטווח עלות</b>. מתחילים מהתובנות למטה, ואז בודקים את השורות שמסומנות "הונח" או "מוערך". אפשר <b>לקבץ</b> לפי סעיף או שלב, <b>למיין</b> בכל עמודה ולסמן שורות לסיכום.
+          </>
+        }
+        insights={insights}
+      />
       <div className="disclaimer">{DISCLAIMER}</div>
       {prices.length === 0 && (
         <div className="notice">
@@ -76,30 +109,6 @@ export default function BomTab() {
           </Link>
         </div>
       )}
-
-      <div className="grid-cards">
-        <div className="card flat stat">
-          <span className="k">טווח עלות · חלופה "{variant.name}"</span>
-          <span className="v">{lines.length && sum.max ? `${fmtMoney(sum.min)} עד ${fmtMoney(sum.max)}` : 'אין מחירים'}</span>
-          {sum.max > 0 && <Tag label={lines.some((l) => l.item && lineLabel(l) === 'assumed') ? 'assumed' : 'estimated'} />}
-        </div>
-        <div className="card flat stat">
-          <span className="k">שורות</span>
-          <span className="v">{lines.length}</span>
-          {sum.missing > 0 && <span className="muted" style={{ fontSize: 13 }}>{sum.missing} שורות בלי מחיר</span>}
-        </div>
-        {budget !== null && (
-          <div className="card flat stat">
-            <span className="k">תקציב לקוח</span>
-            <Num value={budget} money label="assumed" />
-            {sum.max > 0 && (
-              <span className="muted" style={{ fontSize: 13 }}>
-                {sum.max <= budget ? 'גם הטווח העליון בתוך התקציב' : sum.min > budget ? 'גם הטווח התחתון חורג מהתקציב' : 'התקציב בתוך הטווח, יש סיכון לחריגה'}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
 
       {lines.length === 0 ? (
         <div className="card">
@@ -111,77 +120,78 @@ export default function BomTab() {
           </Empty>
         </div>
       ) : (
-        <div className="table-wrap">
-          <table className="t">
-            <thead>
-              <tr>
-                <th>אלמנט</th>
-                <th>סעיף</th>
-                <th>כמות</th>
-                <th>סעיף מחירון</th>
-                <th>מחיר יחידה</th>
-                <th>טווח עלות</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l) => {
+        <DataTable<BomLine>
+          testId="bom-table"
+          caption="כתב כמויות"
+          rows={lines}
+          rowKey={(l) => l.key}
+          defaultGroup="category"
+          groups={[
+            { key: 'category', label: 'סעיף', value: (l) => CATEGORY_TEXT[l.category] },
+            { key: 'phase', label: 'שלב ביצוע', value: phaseOf },
+            { key: 'label', label: 'תווית כמות', value: (l) => LABEL_TEXT[l.qtyLabel] },
+            { key: 'element', label: 'אלמנט', value: (l) => l.elementName },
+          ]}
+          cols={[
+            {
+              key: 'el',
+              label: 'אלמנט',
+              sort: (l) => l.elementName,
+              render: (l) => (
+                <>
+                  {l.elementName}
+                  {l.warning && <div className="lbl assumed" style={{ display: 'block', marginTop: 4, whiteSpace: 'normal' }}>{l.warning}</div>}
+                </>
+              ),
+            },
+            { key: 'cat', label: 'סעיף', sort: (l) => CATEGORY_TEXT[l.category], render: (l) => CATEGORY_TEXT[l.category] },
+            { key: 'qty', label: 'כמות', sort: (l) => l.qty, render: (l) => <Num value={l.qty} unit={UNIT_TEXT[l.unit]} label={l.qtyLabel} digits={l.unit === 'unit' ? 0 : 2} /> },
+            {
+              key: 'item',
+              label: 'סעיף מחירון',
+              sort: (l) => l.item?.code ?? null,
+              minWidth: 180,
+              render: (l) => {
                 const options = prices.filter((p) => p.category === l.category || p.unit === l.unit)
                 return (
-                  <tr key={l.key}>
-                    <td>
-                      {l.elementName}
-                      {l.warning && <div className="lbl assumed" style={{ display: 'block', marginTop: 4, whiteSpace: 'normal' }}>{l.warning}</div>}
-                    </td>
-                    <td>{CATEGORY_TEXT[l.category]}</td>
-                    <td>
-                      <Num value={l.qty} unit={UNIT_TEXT[l.unit]} label={l.qtyLabel} />
-                    </td>
-                    <td style={{ minWidth: 180 }}>
-                      {prices.length ? (
-                        <select className="input" value={variant.assignments[l.key] ?? l.item?.code ?? ''} onChange={(e) => assign(l.key, e.target.value)} aria-label={`סעיף מחירון ל${l.elementName}`}>
-                          <option value="">ללא</option>
-                          {options.map((p) => (
-                            <option key={p.code} value={p.code}>
-                              {p.code} · {p.description}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="muted">מחירון לא נטען</span>
-                      )}
-                      {l.unitMismatch && <div className="lbl estimated" style={{ marginTop: 4 }}>יחידת הסעיף לא תואמת</div>}
-                    </td>
-                    <td>{l.item ? <Num value={l.item.price} money label={priceLabel(l.item)} /> : <span className="muted">אין</span>}</td>
-                    <td>
-                      {l.min !== null && l.max !== null ? (
-                        <span className="numwrap">
-                          <span className="num">
-                            {fmtMoney(l.min)} עד {fmtMoney(l.max)}
-                          </span>
-                          <Tag label={lineLabel(l)} />
-                        </span>
-                      ) : (
-                        <span className="muted">אין</span>
-                      )}
-                    </td>
-                  </tr>
+                  <>
+                    {prices.length ? (
+                      <select className="input" value={variant.assignments[l.key] ?? l.item?.code ?? ''} onChange={(e) => assign(l.key, e.target.value)} aria-label={`סעיף מחירון ל${l.elementName}`}>
+                        <option value="">ללא</option>
+                        {options.map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.code} · {p.description}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="muted">מחירון לא נטען</span>
+                    )}
+                    {l.unitMismatch && <div className="lbl estimated" style={{ marginTop: 4 }}>יחידת הסעיף לא תואמת</div>}
+                  </>
                 )
-              })}
-            </tbody>
-            {sum.max > 0 && (
-              <tfoot>
-                <tr>
-                  <td colSpan={5}>סה"כ</td>
-                  <td>
+              },
+            },
+            { key: 'price', label: 'מחיר יחידה', sort: (l) => l.item?.price ?? null, render: (l) => (l.item ? <Num value={l.item.price} money label={priceLabel(l.item)} /> : <span className="muted">אין</span>) },
+            {
+              key: 'range',
+              label: 'טווח עלות',
+              sort: (l) => l.max,
+              render: (l) =>
+                l.min !== null && l.max !== null ? (
+                  <span className="numwrap">
                     <span className="num">
-                      {fmtMoney(sum.min)} עד {fmtMoney(sum.max)}
+                      {fmtMoney(l.min)} עד {fmtMoney(l.max)}
                     </span>
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+                    <Tag label={lineLabel(l)} />
+                  </span>
+                ) : (
+                  <span className="muted">אין</span>
+                ),
+              sum: rangeSum,
+            },
+          ]}
+        />
       )}
 
       <div className="row no-print">

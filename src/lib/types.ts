@@ -275,6 +275,7 @@ export interface Requirements {
   materials: string
   budget: number | null
   constraints: string
+  style?: string // סגנון גינה מהמדריך (StyleId)
 }
 
 export interface Variant {

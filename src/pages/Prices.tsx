@@ -1,9 +1,13 @@
 import { useRef, useState } from 'react'
-import { setPrices, useApp } from '../lib/store'
+import { defaultPrices, setPrices, useApp } from '../lib/store'
+import { DEKEL_DATE, DEKEL_SOURCES } from '../data/dekelPrices'
+import { PageIntro } from '../components/PageIntro'
+import { DataTable } from '../components/DataTable'
+import type { PriceItem } from '../lib/types'
 import { CSV_HEADER, SAMPLE_CSV, parsePriceCsv } from '../lib/csv'
 import { CATEGORY_TEXT, DISCLAIMER, type Category } from '../lib/bom'
 import { UNIT_TEXT } from '../lib/types'
-import { Empty, Num, Rise, toast } from '../components/ui'
+import { Empty, Num, toast } from '../components/ui'
 import { priceLabel } from './BomTab'
 
 export default function Prices() {
@@ -41,11 +45,22 @@ export default function Prices() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <Rise>
-        <div className="eyebrow">price_items</div>
-        <h1 className="h-page">מחירון</h1>
-        <p className="lead">המחירון נטען מקובץ CSV ולא קבוע בקוד. כל סעיף מקושר לקטגוריה, והקטגוריה מחברת אותו לשורות בכתב הכמויות.</p>
-      </Rise>
+      <h1 className="h-page">מחירון</h1>
+      <PageIntro
+        art="prices"
+        title="המחירון קובע את טווח העלות של כל שורה בכתב הכמויות"
+        why={
+          <>
+            כל סעיף מקושר ל<b>קטגוריה</b>, והקטגוריה מחברת אותו לשורות בכתב הכמויות. כברירת מחדל נטענת <b>טבלת גינון ופיתוח נוף ממקורות ציבוריים</b> (מכרזים שמצטטים את מחירון דקל ומחירי שוק). היא <b>לא מאומתת</b> מול מחירון דקל המלא, ולכן כל מחיר מסומן "הונח". מחירון דקל מעודכן נטען כקובץ CSV.
+          </>
+        }
+        insights={[
+          { k: 'סעיפים', v: prices.length },
+          { k: 'קטגוריות מכוסות', v: `${new Set(prices.map((p) => p.category)).size} מתוך ${Object.keys(CATEGORY_TEXT).length}`, tone: new Set(prices.map((p) => p.category)).size >= Object.keys(CATEGORY_TEXT).length ? 'good' : 'warn' },
+          { k: 'מאומתים', v: prices.filter((p) => p.verified).length, tone: prices.some((p) => p.verified) ? 'good' : 'warn', note: 'מול מחירון וספק' },
+          { k: 'עם קוד דקל', v: prices.filter((p) => /^4\d\./.test(p.code)).length },
+        ]}
+      />
       <div className="disclaimer">{DISCLAIMER}</div>
 
       <div className="card">
@@ -55,6 +70,18 @@ export default function Prices() {
           </button>
           <button className="btn" onClick={downloadTemplate}>
             הורדת תבנית
+          </button>
+          <button
+            className="btn"
+            onClick={() => {
+              if (prices.length && !window.confirm('להחליף את המחירון הקיים בטבלה הציבורית?')) return
+              const items = defaultPrices()
+              setPrices(items)
+              setErrors([])
+              toast(`טבלה ציבורית: נטענו ${items.length} סעיפים`)
+            }}
+          >
+            טבלה ציבורית ({DEKEL_DATE})
           </button>
           <button
             className="btn"
@@ -100,41 +127,72 @@ export default function Prices() {
       {prices.length === 0 ? (
         <div className="card">
           <Empty title="מחירון לא נטען">
-            <div>עד שנטען מחירון דקל, כתב הכמויות מציג כמויות בלבד.</div>
+            <div>עד שנטען מחירון, כתב הכמויות מציג כמויות בלבד. אפשר לטעון את הטבלה הציבורית בכפתור למעלה.</div>
           </Empty>
         </div>
       ) : (
         <>
           <input className="input" style={{ maxWidth: 320 }} placeholder="חיפוש סעיף" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש סעיף" />
-          <div className="table-wrap">
-            <table className="t">
-              <thead>
-                <tr>
-                  <th>קוד</th>
-                  <th>תיאור</th>
-                  <th>קטגוריה</th>
-                  <th>מחיר</th>
-                  <th>מקור</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((p) => (
-                  <tr key={p.code + p.description}>
-                    <td className="mono">{p.code}</td>
-                    <td>{p.description}</td>
-                    <td>{CATEGORY_TEXT[p.category as Category] ?? (p.category || 'ללא')}</td>
-                    <td>
-                      <Num value={p.price} money label={priceLabel(p)} /> <span className="muted">ל{UNIT_TEXT[p.unit]}</span>
-                    </td>
-                    <td className="muted">
-                      {p.source} {p.date}
-                      {!p.verified && <div className="lbl assumed">לא מאומת</div>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable<PriceItem>
+            testId="prices-table"
+            caption="סעיפי המחירון"
+            rows={list}
+            rowKey={(p) => p.code + p.description}
+            defaultGroup="category"
+            groups={[
+              { key: 'category', label: 'קטגוריה', value: (p) => CATEGORY_TEXT[p.category as Category] ?? (p.category || 'ללא') },
+              { key: 'unit', label: 'יחידה', value: (p) => UNIT_TEXT[p.unit] },
+              { key: 'source', label: 'מקור', value: (p) => p.source },
+            ]}
+            cols={[
+              { key: 'code', label: 'קוד', sort: (p) => p.code, render: (p) => <span className="mono">{p.code}</span> },
+              { key: 'desc', label: 'תיאור', sort: (p) => p.description, render: (p) => p.description, minWidth: 220 },
+              { key: 'cat', label: 'קטגוריה', sort: (p) => CATEGORY_TEXT[p.category as Category] ?? p.category, render: (p) => CATEGORY_TEXT[p.category as Category] ?? (p.category || 'ללא') },
+              {
+                key: 'price',
+                label: 'מחיר',
+                sort: (p) => p.price,
+                render: (p) => (
+                  <>
+                    <Num value={p.price} money label={priceLabel(p)} /> <span className="muted">ל{UNIT_TEXT[p.unit]}</span>
+                  </>
+                ),
+              },
+              {
+                key: 'src',
+                label: 'מקור',
+                sort: (p) => p.source,
+                render: (p) => (
+                  <span className="muted">
+                    {p.source} {p.date}
+                    {!p.verified && <span className="lbl assumed" style={{ marginInlineStart: 6 }}>לא מאומת</span>}
+                  </span>
+                ),
+              },
+            ]}
+            selectable={false}
+          />
+          <details className="card flat">
+            <summary>
+              <b>מקורות הטבלה הציבורית ({DEKEL_SOURCES.length})</b>
+            </summary>
+            <ul className="sources">
+              {DEKEL_SOURCES.map((src) => (
+                <li key={src.title}>
+                  {src.url ? (
+                    <a href={src.url} target="_blank" rel="noreferrer">
+                      {src.title}
+                    </a>
+                  ) : (
+                    <b>{src.title}</b>
+                  )}
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {src.note}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </details>
         </>
       )}
     </div>

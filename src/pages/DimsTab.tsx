@@ -10,6 +10,8 @@ import { setPlanScale, uid, updateProject } from '../lib/store'
 import type { DimScale, Label, Permit, PlanDimension } from '../lib/types'
 import { DRAWING_KIND_TEXT, PAGE_KIND_TEXT } from '../lib/types'
 import { Empty, ErrorState, Loading, NumField, Tag, toast } from '../components/ui'
+import { PageIntro } from '../components/PageIntro'
+
 
 export const dimLabel = (d: PlanDimension): Label => (d.source === 'text-layer' || d.status === 'confirmed' ? 'measured' : 'estimated')
 
@@ -188,8 +190,26 @@ export default function DimsTab() {
   const isPlan = page === permit.planPage
   const scaleDiff = live && permit.scale.metersPerPt && isPlan ? live.metersPerPt / permit.scale.metersPerPt - 1 : null
 
+  const allDims = permit.dims ?? []
+  const measuredCount = allDims.filter((d) => d.source === 'text-layer' || d.status === 'confirmed').length
+  const pendingCount = allDims.filter((d) => d.status === 'pending' && d.source !== 'text-layer').length
   return (
     <div className="stack" style={{ gap: 14 }}>
+      <PageIntro
+        art="dims"
+        compact
+        title="המידות הכתובות הן הבסיס לכל מספר באפליקציה"
+        why={
+          <>
+            כאן קוראים את <b>המידות שכתובות בהיתר</b>, בודקים אותן מול <b>קווי המידה</b>, ומאשרים. מידה מאושרת הופכת ל<b>"מדוד מהיתר"</b> וקובעת את קנה המידה, את אורכי הקירות ואת הכמויות בכתב הכמויות.
+          </>
+        }
+        insights={[
+          { k: 'מידות שנקראו', v: allDims.length },
+          { k: 'מדודות או מאושרות', v: measuredCount, tone: measuredCount ? 'good' : 'warn', label: 'measured' },
+          { k: 'ממתינות לבדיקה', v: pendingCount, tone: pendingCount ? 'warn' : 'good' },
+        ]}
+      />
       <div className="card flat">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>

@@ -14,6 +14,7 @@ const TABS = [
   { to: '', t: 'סקירה', end: true },
   { to: 'permit', t: 'היתר' },
   { to: 'dims', t: 'מידות' },
+  { to: 'design', t: 'תכנון הגינה' },
   { to: 'plan', t: 'תוכנית ועריכה' },
   { to: 'model', t: 'מודל תלת-ממדי' },
   { to: 'bom', t: 'כתב כמויות' },

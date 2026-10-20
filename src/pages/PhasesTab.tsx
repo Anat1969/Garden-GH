@@ -4,6 +4,7 @@ import { useProject } from './ProjectLayout'
 import { useApp } from '../lib/store'
 import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, computeBom, fmtMoney, hasBasis, sumRange } from '../lib/bom'
 import { Empty, Rise, Tag } from '../components/ui'
+import { PageIntro } from '../components/PageIntro'
 import { lineLabel } from './BomTab'
 
 export default function PhasesTab() {
@@ -30,8 +31,23 @@ export default function PhasesTab() {
   const total = sumRange(lines)
   const maxAll = Math.max(1, ...phases.map((p) => p.sum.max))
 
+  const biggest = [...phases].sort((a, b) => b.sum.max - a.sum.max)[0]
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <PageIntro
+        art="phases"
+        title="סדר ביצוע ותקציב לכל שלב"
+        why={
+          <>
+            השלבים מסדרים את העבודה כך ש<b>מה שקשה להחזיר לאחור</b> (עפר, קירות, תשתיות) נעשה ראשון, ו<b>שתילה וריהוט</b> בסוף. לכל שלב יש טווח עלות, כדי לתכנן <b>תזרים ותיאום קבלנים</b>.
+          </>
+        }
+        insights={[
+          { k: 'תקציב כולל', v: total.max ? `${fmtMoney(total.min)} עד ${fmtMoney(total.max)}` : 'אין מחירים', label: total.max ? 'assumed' : undefined },
+          { k: 'שלבים', v: phases.length },
+          { k: 'השלב היקר', v: biggest ? biggest.name : 'אין', note: biggest && total.max ? `${Math.round((biggest.sum.max / total.max) * 100)}% מהתקציב` : undefined },
+        ]}
+      />
       <div className="disclaimer">{DISCLAIMER}</div>
       {phases.length === 0 ? (
         <div className="card">

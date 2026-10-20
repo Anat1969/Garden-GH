@@ -95,15 +95,22 @@ export function NumField({
   onChange,
   step = 0.05,
   min,
+  decimals = 2,
 }: {
   label: string
   value: number
   onChange: (v: number) => void
   step?: number
   min?: number
+  decimals?: number
 }) {
-  const [text, setText] = useState(String(value))
-  useEffect(() => setText(String(value)), [value])
+  // תצוגה בשתי ספרות אחרי הנקודה. בזמן הקלדה הטקסט נשאר כפי שהוקלד
+  const show = (v: number) => (Number.isFinite(v) ? v.toFixed(decimals) : '')
+  const [text, setText] = useState(show(value))
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!editing) setText(show(value))
+  }, [value, editing]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <label className="field">
       <span>{label}</span>
@@ -114,6 +121,11 @@ export function NumField({
         step={step}
         min={min}
         value={text}
+        onFocus={() => setEditing(true)}
+        onBlur={() => {
+          setEditing(false)
+          setText(show(value))
+        }}
         onChange={(e) => {
           setText(e.target.value)
           const n = Number(e.target.value)

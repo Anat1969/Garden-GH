@@ -16,6 +16,7 @@ import { baseAbs } from '../lib/structureToElements'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
 import { Empty, Tag } from '../components/ui'
+import { PageIntro } from '../components/PageIntro'
 
 function Controls({ target, dist }: { target: [number, number, number]; dist: number }) {
   const { camera, gl } = useThree()
@@ -195,17 +196,17 @@ function DimLabels({ elements, k }: { elements: Element[]; k: number }) {
         }
         if (e.kind === 'surface') {
           const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          return <Label3D key={e.id} text={`${fmtNum(surfaceArea(e), 1)} מ"ר · ${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)} · ${LABEL_TEXT[e.label]}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
+          return <Label3D key={e.id} text={`${fmtNum(surfaceArea(e))} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} מ' · ${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)} · ${LABEL_TEXT[e.label]}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
         }
         if (e.kind === 'object') {
           if (Math.max(e.w, e.d) < 1.5) return null
-          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w, 1)}×${fmtNum(e.d, 1)} · ${LABEL_TEXT[e.label]}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
+          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)} · ${LABEL_TEXT[e.label]}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
         }
         if (e.kind === 'line') {
           const L = polyLength(e.pts)
           if (L < 2) return null
           const m = e.pts[Math.floor(e.pts.length / 2)]
-          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L, 1)} מ' · ${LABEL_TEXT[e.label]}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
+          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L)} מ' · ${LABEL_TEXT[e.label]}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
         }
         return null
       })}
@@ -265,6 +266,21 @@ export default function ModelTab() {
   const unapproved = variant.elements.filter((e) => !e.approved).length
 
   return (
+    <div className="stack" style={{ gap: 12 }}>
+    <PageIntro
+      art="model"
+      compact
+      title="הבית והגינה בנפח, לפני שמזמינים חומר"
+      why={
+        <>
+          המודל נבנה מאותם אלמנטים של התוכנית: <b>גבהים, מפלסים, טקסטורות</b> ופריטים. כאן בודקים <b>פרופורציות וצל</b>, ולוחצים על אלמנט כדי לערוך אותו. מידות מוצגות בכפתור <b>"הצגת מידות"</b>.
+        </>
+      }
+      insights={[
+        { k: 'אלמנטים במודל', v: variant.elements.length },
+        { k: 'לא אושרו', v: unapproved, tone: unapproved ? 'warn' : 'good' },
+      ]}
+    />
     <div className="editor">
       <div className="model-box" data-testid="model-canvas">
         <Canvas shadows dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} onPointerMissed={() => select(null)}>
@@ -319,6 +335,7 @@ export default function ModelTab() {
           </div>
         </div>
       </aside>
+    </div>
     </div>
   )
 }

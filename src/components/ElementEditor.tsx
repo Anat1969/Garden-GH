@@ -4,7 +4,9 @@ import { removeElement, upsertElement } from '../lib/store'
 import { NumField, Num, Tag } from './ui'
 import { dimLabelText, dimsForElement } from '../lib/dims'
 import { polyLength, surfaceArea } from '../lib/bom'
-import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
+import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType, type SurfaceMaterial } from '../lib/garden'
+import { textureUrl } from '../lib/textures'
+import { IconBtn } from './EditIcons'
 
 const len = (w: { x1: number; y1: number; x2: number; y2: number }) => Math.hypot(w.x2 - w.x1, w.y2 - w.y1)
 
@@ -21,7 +23,7 @@ export function approvedLabel(project: Project): Label {
 
 export function ElementEditor({ project, el, elements, name, onClose }: { project: Project; el: Element; elements: Element[]; name: string; onClose?: () => void }) {
   // עריכה ידנית של מידה הופכת אותה ל"הונח" עד שמסמנים אחרת
-  const save = (patch: Partial<Element>, keepLabel = false) => upsertElement(project.id, { ...el, ...patch, ...(keepLabel ? {} : { label: 'assumed' }) } as Element)
+  const save = (patch: Partial<Element>, keepLabel = false) => upsertElement(project.id, { ...el, ...patch, ...(keepLabel ? {} : { label: 'assumed' }) } as Element, true)
   const wall = el.kind === 'opening' ? (elements.find((e) => e.id === el.wallId) as Wall | undefined) : undefined
 
   return (
@@ -73,16 +75,25 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
         )}
         {el.kind === 'surface' && (
           <>
-            <label className="field">
-              <span>חומר</span>
-              <select className="input" value={el.material} onChange={(e) => save({ material: e.target.value as typeof el.material }, true)}>
-                {Object.entries(MATERIAL_TEXT).map(([k, t]) => (
-                  <option key={k} value={k}>
-                    {t}
-                  </option>
+            <div className="field" style={{ gridColumn: '1 / -1' }}>
+              <span>חומר וטקסטורה · {MATERIAL_TEXT[el.material]}</span>
+              <div className="swatches editor-swatches" role="radiogroup" aria-label="חומר המשטח">
+                {(Object.keys(MATERIALS) as SurfaceMaterial[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={el.material === m}
+                    className={`swatch-btn ${el.material === m ? 'on' : ''}`}
+                    onClick={() => save({ material: m, color: undefined }, true)}
+                    title={MATERIALS[m].text}
+                  >
+                    <i style={{ backgroundImage: `url(${textureUrl(m, el.material === m ? el.color : undefined, 96)})` }} />
+                    <span>{MATERIALS[m].text}</span>
+                  </button>
                 ))}
-              </select>
-            </label>
+              </div>
+            </div>
             {!el.poly && <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />}
             {!el.poly && <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />}
             <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
@@ -104,7 +115,7 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
             <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />
             <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />
             <NumField label="גובה (מ')" value={el.h} onChange={(v) => v > 0 && save({ h: v })} />
-            <NumField label="סיבוב (מעלות)" value={el.rot} step={15} onChange={(v) => save({ rot: ((v % 360) + 360) % 360 }, true)} />
+            <NumField label="סיבוב (מעלות)" value={el.rot} step={15} decimals={0} onChange={(v) => save({ rot: ((v % 360) + 360) % 360 }, true)} />
             <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
             <ColorField value={el.color} fallback={OBJECTS[el.type].color} onChange={(c) => save({ color: c }, true)} />
           </>
@@ -183,29 +194,19 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
 
       <div className="row" style={{ marginTop: 14 }}>
         {!el.approved && (
-          <button className="btn primary" onClick={() => upsertElement(project.id, { ...el, approved: true, label: el.label === 'estimated' ? approvedLabel(project) : el.label } as Element)}>
-            אישור האלמנט
-          </button>
+          <IconBtn icon="approve" label="אישור האלמנט" className="primary" onClick={() => upsertElement(project.id, { ...el, approved: true, label: el.label === 'estimated' ? approvedLabel(project) : el.label } as Element)} />
         )}
-        {el.approved && (
-          <button className="btn" onClick={() => save({ approved: false }, true)}>
-            ביטול אישור
-          </button>
-        )}
-        <button
-          className="btn danger"
+        {el.approved && <IconBtn icon="undo" label="ביטול אישור" onClick={() => save({ approved: false }, true)} />}
+        <IconBtn
+          icon="delete"
+          label="מחיקה"
+          className="danger"
           onClick={() => {
             removeElement(project.id, el.id)
             onClose?.()
           }}
-        >
-          מחיקה
-        </button>
-        {onClose && (
-          <button className="btn ghost" onClick={onClose}>
-            סגירה
-          </button>
-        )}
+        />
+        {onClose && <IconBtn icon="close" label="סגירה" className="ghost" onClick={onClose} />}
       </div>
     </div>
   )
