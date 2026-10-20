@@ -300,7 +300,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
                 </tr>
               </thead>
               <tbody>
-                {b.levels.slice(0, 60).map((l, i) => (
+                {uniqLevels(b.levels).slice(0, 40).map((l, i) => (
                   <tr key={i}>
                     <td className="mono">{l.text}</td>
                     <td>
@@ -311,7 +311,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
                     </td>
                     <td className="num">{l.abs ? l.abs.toFixed(2) : ''}</td>
                     <td>{MEANING_TEXT[l.meaning] ?? l.meaning}</td>
-                    <td className="muted">{l.drawing}</td>
+                    <td className="muted">{l.drawing}{l.count > 1 ? ` ועוד ${l.count - 1}` : ''}</td>
                   </tr>
                 ))}
               </tbody>
@@ -324,4 +324,18 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       )}
     </div>
   )
+}
+
+// אותו גובה באותה משמעות מכמה שרטוטים מוצג פעם אחת, עם מספר המקורות
+function uniqLevels(levels: Building['levels']) {
+  const m = new Map<string, Building['levels'][number] & { count: number }>()
+  for (const l of levels) {
+    const k = `${l.meaning}:${l.rel.toFixed(2)}`
+    const e = m.get(k)
+    if (e) {
+      e.count++
+      if (!e.abs && l.abs) e.abs = l.abs
+    } else m.set(k, { ...l, count: 1 })
+  }
+  return [...m.values()].sort((a, b) => a.rel - b.rel)
 }

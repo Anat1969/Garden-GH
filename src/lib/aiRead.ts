@@ -1,12 +1,10 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { Box, PlanDimension } from './types'
-import { renderRegion } from './permitReader'
+import { postFn, renderRegion } from './permitReader'
 
 // קריאה חכמה של מידות: הגיליון מחולק לאריחים בגודל שהמודל קורא בחדות מלאה (עד 2576 פיקסל לצלע),
 // כל אריח נשלח לפונקציית garden-read-plan, והתוצאות מוחזרות ליחידות העמוד.
 
-const FN_URL = `${import.meta.env.VITE_SUPABASE_URL ?? ''}/functions/v1/garden-read-plan`
-const KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ?? ''
 const TILE = 2400
 const MAX_RENDER_EDGE = 6000
 
@@ -49,14 +47,7 @@ export function tilePlan(pageW: number, pageH: number, isImage: boolean, detail:
 }
 
 async function callFn(b64: string, w: number, h: number, hint: string): Promise<{ scale_text: string; dimensions: AiItem[] }> {
-  const res = await fetch(FN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: KEY },
-    body: JSON.stringify({ image: b64, media_type: 'image/jpeg', width: w, height: h, hint }),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json?.error || `שגיאה ${res.status}`)
-  return json.result
+  return postFn({ task: 'dims', image: b64, media_type: 'image/jpeg', width: w, height: h, hint })
 }
 
 export async function readPageWithAi(

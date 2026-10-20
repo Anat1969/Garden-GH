@@ -9,14 +9,27 @@ export const MAX_EDGE = 2576
 
 export async function callTask<T>(task: string, canvas: HTMLCanvasElement, hint = ''): Promise<T> {
   const b64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1]
-  const res = await fetch(FN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: KEY },
-    body: JSON.stringify({ task, image: b64, media_type: 'image/jpeg', width: canvas.width, height: canvas.height, hint }),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(json?.error || `שגיאה ${res.status}`)
-  return json.result as T
+  return postFn<T>({ task, image: b64, media_type: 'image/jpeg', width: canvas.width, height: canvas.height, hint })
+}
+
+// קריאה לפונקציה עם ניסיון חוזר על עומס או עלייה כושלת (429, 5xx)
+export async function postFn<T>(body: Record<string, unknown>): Promise<T> {
+  let last = ''
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt * attempt))
+    let res: Response
+    try {
+      res = await fetch(FN_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY }, body: JSON.stringify(body) })
+    } catch {
+      last = 'אין חיבור לשרת הקריאה'
+      continue
+    }
+    const json = await res.json().catch(() => ({}))
+    if (res.ok) return json.result as T
+    last = json?.error || json?.message || `שגיאה ${res.status}`
+    if (res.status !== 429 && res.status < 500) break
+  }
+  throw new Error(last)
 }
 
 // מרנדר אזור מהעמוד (ביחידות עמוד) לקנבס, בקנה מידה שהצלע הארוכה לא עולה על maxEdge
