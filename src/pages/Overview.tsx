@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { updateProject, updateVariant } from '../lib/store'
 import { NumField, Tag } from '../components/ui'
+import { PageIntro } from '../components/PageIntro'
 import { PAGE_KIND_TEXT } from '../lib/types'
 import { NO_BASIS, hasBasis } from '../lib/bom'
 
@@ -29,6 +30,20 @@ export default function Overview() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
+      <PageIntro
+        art="overview"
+        title="תמונת מצב של הפרויקט והצעד הבא"
+        why={
+          <>
+            הסקירה מרכזת את <b>מה שכבר נקבע</b> (היתר, קנה מידה, אלמנטים) ואת <b>דרישות הלקוח</b>. הצעד הבא מחושב לפי מה שחסר, כך שתמיד ברור <b>מה עושים עכשיו</b>.
+          </>
+        }
+        insights={[
+          { k: 'הצעד הבא', v: next.t, tone: 'warn' },
+          { k: 'ממתינים לאישור', v: pending, tone: pending ? 'warn' : 'good' },
+          { k: 'משטחי גינה', v: surfaces },
+        ]}
+      />
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
@@ -87,7 +102,7 @@ export default function Overview() {
             <span>כתובת</span>
             <input className="input" value={project.address} onChange={(e) => setP({ address: e.target.value })} />
           </label>
-          <NumField label="כיוון צפון (מעלות, 0 = למעלה בתוכנית)" value={project.north} step={1} onChange={(n) => setP({ north: n })} />
+          <NumField label="כיוון צפון (מעלות, 0 = למעלה בתוכנית)" value={project.north} step={1} decimals={0} onChange={(n) => setP({ north: n })} />
           <label className="field">
             <span>סוג קרקע</span>
             <select className="input" value={project.soil} onChange={(e) => setP({ soil: e.target.value })}>

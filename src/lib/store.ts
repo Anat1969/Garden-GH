@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import type { Element, PriceItem, Project, Requirements, ScaleInfo, Variant } from './types'
 import { getClient } from './supabase'
+import { parsePriceCsv } from './csv'
+import { DEKEL_CSV } from '../data/dekelPrices'
 import { deleteDocBlob, deletePdf } from './idb'
 import { scaleElement } from './elementGeom'
 export { scaleElement }
@@ -31,9 +33,12 @@ function readLS<T>(key: string, fallback: T): T {
   }
 }
 
+// מחירון ברירת מחדל: טבלת גינון ופיתוח נוף ממקורות ציבוריים (src/data/dekelPrices.ts), עד שנטען מחירון אחר
+export const defaultPrices = (): PriceItem[] => parsePriceCsv(DEKEL_CSV).items
+
 let state: AppState = {
   projects: readLS<Project[]>(LS_PROJECTS, []),
-  prices: readLS<PriceItem[]>(LS_PRICES, []),
+  prices: readLS<PriceItem[] | null>(LS_PRICES, null) ?? defaultPrices(),
   userEmail: null,
   userId: null,
   cloud: 'local',
@@ -138,18 +143,70 @@ export function activeVariant(p: Project): Variant {
   return p.variants.find((v) => v.id === p.activeVariantId) ?? p.variants[0]
 }
 
-export function updateVariant(projectId: string, fn: (v: Variant) => Variant) {
+// היסטוריית ביטול לכל חלופה: צילום רשימת האלמנטים לפני כל שינוי. שינויים מהירים ברצף (הקלדה) מתאחדים לצעד אחד
+const undoStack = new Map<string, Element[][]>()
+const redoStack = new Map<string, Element[][]>()
+let lastPush = { key: '', at: 0 }
+const histKey = (p: Project) => `${p.id}:${p.activeVariantId}`
+
+// coalesce: מזהה פעולה. עריכות רצופות של אותו אלמנט (הקלדה במספר) מתאחדות לצעד אחד
+function pushHistory(p: Project, coalesce?: string) {
+  const key = `${histKey(p)}|${coalesce ?? Math.random()}`
+  const now = Date.now()
+  if (coalesce && lastPush.key === key && now - lastPush.at < 800) {
+    lastPush.at = now
+    return
+  }
+  lastPush = { key, at: now }
+  const stackKey = histKey(p)
+  const stack = undoStack.get(stackKey) ?? []
+  stack.push(activeVariant(p).elements)
+  if (stack.length > 60) stack.shift()
+  undoStack.set(stackKey, stack)
+  redoStack.delete(stackKey)
+}
+
+export function updateVariant(projectId: string, fn: (v: Variant) => Variant, coalesce?: string) {
+  const cur = state.projects.find((p) => p.id === projectId)
+  if (cur) pushHistory(cur, coalesce)
   updateProject(projectId, (p) => ({
     ...p,
     variants: p.variants.map((v) => (v.id === p.activeVariantId ? fn(v) : v)),
   }))
 }
 
-export function upsertElement(projectId: string, el: Element) {
-  updateVariant(projectId, (v) => {
-    const exists = v.elements.some((e) => e.id === el.id)
-    return { ...v, elements: exists ? v.elements.map((e) => (e.id === el.id ? el : e)) : [...v.elements, el] }
-  })
+export function canUndo(p: Project) {
+  return (undoStack.get(histKey(p))?.length ?? 0) > 0
+}
+export function canRedo(p: Project) {
+  return (redoStack.get(histKey(p))?.length ?? 0) > 0
+}
+
+function swapHistory(projectId: string, from: Map<string, Element[][]>, to: Map<string, Element[][]>) {
+  const p = state.projects.find((x) => x.id === projectId)
+  if (!p) return false
+  const key = histKey(p)
+  const prev = from.get(key)?.pop()
+  if (!prev) return false
+  const stack = to.get(key) ?? []
+  stack.push(activeVariant(p).elements)
+  to.set(key, stack)
+  lastPush = { key: '', at: 0 }
+  updateProject(projectId, (x) => ({ ...x, variants: x.variants.map((v) => (v.id === x.activeVariantId ? { ...v, elements: prev } : v)) }))
+  return true
+}
+export const undo = (projectId: string) => swapHistory(projectId, undoStack, redoStack)
+export const redo = (projectId: string) => swapHistory(projectId, redoStack, undoStack)
+
+export function upsertElement(projectId: string, el: Element, coalesce = false) {
+  updateVariant(
+    projectId,
+    (v) => {
+      const exists = v.elements.some((e) => e.id === el.id)
+      return { ...v, elements: exists ? v.elements.map((e) => (e.id === el.id ? el : e)) : [...v.elements, el] }
+    },
+    coalesce ? `el:${el.id}` : undefined,
+  )
 }
 
 export function removeElement(projectId: string, id: string) {

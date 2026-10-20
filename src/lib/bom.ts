@@ -330,6 +330,7 @@ export const PHASES: Phase[] = [
 ]
 
 export const fmtMoney = (n: number) => '₪' + Math.round(n).toLocaleString('he-IL')
-export const fmtNum = (n: number, d = 2) => n.toLocaleString('he-IL', { maximumFractionDigits: d, minimumFractionDigits: 0 })
+// מספרים: תמיד שתי ספרות אחרי הנקודה (כמויות של יחידות: 0)
+export const fmtNum = (n: number, d = 2) => n.toLocaleString('he-IL', { maximumFractionDigits: d, minimumFractionDigits: d })
 
 export const surfaceArea = (e: { poly?: { x: number; y: number }[]; w: number; d: number }) => (e.poly && e.poly.length >= 3 ? Math.abs(polyArea(e.poly)) : e.w * e.d)

@@ -4,14 +4,16 @@ import { useProject } from './ProjectLayout'
 import { usePermitDoc } from '../lib/usePermit'
 import { PT_TO_M_AT_1 } from '../lib/pdf'
 import { renderRegion } from '../lib/permitReader'
-import { setPlanScale, uid, updateProject, updateVariant, upsertElement } from '../lib/store'
+import { canRedo, canUndo, redo, removeElement, setPlanScale, uid, undo, updateProject, updateVariant, upsertElement } from '../lib/store'
 import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, GardenLine, GardenObject, Opening, OpeningType, Pt, Sketch, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
 import { NO_BASIS, numberedNames, fmtNum, polyLength, surfaceArea } from '../lib/bom'
 import { LABEL_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
-import { boundsOf, moveElement, rdp, scaleElement } from '../lib/elementGeom'
+import { boundsOf, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
+import { IconBtn } from '../components/EditIcons'
+import { PageIntro } from '../components/PageIntro'
 import { textureUrl } from '../lib/textures'
 import { ElementEditor, approvedLabel } from '../components/ElementEditor'
 import { GardenPalette, type Group, type Tool } from '../components/GardenPalette'
@@ -77,6 +79,11 @@ export default function PlanTab() {
   const [penStroke, setPenStroke] = useState(0.08)
   const [group, setGroup] = useState<Group>(GROUP_OF[tool] ?? (tool === 'object' && item ? (OBJECTS[item as ObjectType]?.group ?? 'plants') : 'tools'))
   const [showDims, setShowDims] = useState(false)
+  const [snapOn, setSnapOn] = useState(true)
+  const [snapHit, setSnapHit] = useState<Pt | null>(null)
+  // עריכת מידה ישירות על התוכנית: תיבת קלט מעל תווית המידה
+  const [dimEdit, setDimEdit] = useState<{ id: string; part: number | 'w' | 'd' | 'len'; value: string; sx: number; sy: number } | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const [moving, setMoving] = useState<{ el: Element; start: Pt; dx: number; dy: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ sx: number; sy: number; v: View; moved: boolean } | null>(null)
@@ -156,9 +163,15 @@ export default function PlanTab() {
     [variant.elements],
   )
 
+  const snaps = useMemo(() => snapSet(variant.elements), [variant.elements])
   const snapPoint = (p: Pt, from?: Pt | null) => {
     const tol = view.w / 60
-    for (const ep of endpoints) if (Math.hypot(ep.x - p.x, ep.y - p.y) < tol) return { ...ep }
+    if (snapOn) {
+      const hit = snapTo(p, snaps, tol)
+      if (hit) return hit.p
+    } else {
+      for (const ep of endpoints) if (Math.hypot(ep.x - p.x, ep.y - p.y) < tol / 2) return { ...ep }
+    }
     let x = snap(p.x)
     let y = snap(p.y)
     if (from) {
@@ -173,8 +186,19 @@ export default function PlanTab() {
 
   const src = (what: string) => `שרטוט ידני (${what})`
   const add = (el: Element) => {
+    if (el.kind === 'surface' && snapOn && mergeInto(el)) return
     upsertElement(project.id, el)
     select(el.id)
+  }
+  // משטח חדש או שהוזז שנוגע במשטח מאותו חומר: מתאחדים למשטח אחד (אפשר לבטל)
+  const mergeInto = (el: Surface) => {
+    const all = [...variant.elements.filter((e) => e.id !== el.id), el]
+    const m = mergeSameMaterial(all, el.id)
+    if (!m) return false
+    updateVariant(project.id, (v) => ({ ...v, elements: [...v.elements.filter((e) => e.id !== el.id && !m.removed.includes(e.id)), { ...m.merged, label: 'assumed' as const }] }))
+    select(m.merged.id)
+    toast(`חובר למשטח ${MATERIALS[el.material].text} סמוך. ביטול: Ctrl+Z`)
+    return true
   }
 
   const makeSurface = (poly: Pt[] | null, rect: { x: number; y: number; w: number; d: number } | null, how: string) => {
@@ -366,7 +390,12 @@ export default function PlanTab() {
       return
     }
     if (moving) {
-      setMoving({ ...moving, dx: w.x - moving.start.x, dy: w.y - moving.start.y })
+      const raw = { dx: w.x - moving.start.x, dy: w.y - moving.start.y }
+      if (snapOn) {
+        const sm = snapMove(moving.el, raw.dx, raw.dy, snapSet(variant.elements, moving.el.id), view.w / 70)
+        setSnapHit(sm.at)
+        setMoving({ ...moving, dx: sm.dx, dy: sm.dy })
+      } else setMoving({ ...moving, ...raw })
       return
     }
     setHover(pending ? snapPoint(w, pending) : polyPts.length ? snapPoint(w, polyPts[polyPts.length - 1]) : w)
@@ -388,8 +417,12 @@ export default function PlanTab() {
       return
     }
     if (moving) {
-      if (Math.hypot(moving.dx, moving.dy) > 0.02) upsertElement(project.id, moveElement(moving.el, r2(moving.dx), r2(moving.dy)))
+      if (Math.hypot(moving.dx, moving.dy) > 0.02) {
+        const moved = moveElement(moving.el, r2(moving.dx), r2(moving.dy))
+        if (!(moved.kind === 'surface' && snapOn && mergeInto(moved))) upsertElement(project.id, moved)
+      }
       setMoving(null)
+      setSnapHit(null)
       return
     }
     const d = drag.current
@@ -417,12 +450,84 @@ export default function PlanTab() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return
-      if (e.key === 'Escape') resetDraft()
+      if ((e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'SELECT') return
+      if (e.key === 'Escape') {
+        resetDraft()
+        setDimEdit(null)
+      }
       if (e.key === 'Enter' && polyPts.length) finishPoly()
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected && !polyPts.length) {
+        e.preventDefault()
+        deleteSelected()
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo(project.id)
+        else undo(project.id)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        redo(project.id)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  const deleteSelected = () => {
+    if (!selected) return
+    removeElement(project.id, selected.id)
+    select(null)
+    toast('האלמנט נמחק. ביטול: Ctrl+Z')
+  }
+  const duplicateSelected = () => {
+    if (!selected || selected.kind === 'opening') return
+    const copy = { ...moveElement(selected, 0.5, 0.5), id: uid(), approved: false, label: 'assumed' as const, source: `העתק של ${names.get(selected.id) ?? ''}` } as Element
+    upsertElement(project.id, copy)
+    select(copy.id)
+  }
+  const rotateSelected = () => {
+    if (!selected) return
+    upsertElement(project.id, rotateElement(selected, 90))
+  }
+  const mergeSelected = () => {
+    if (selected?.kind !== 'surface') return
+    if (!mergeInto(selected)) toast('אין משטח נוגע מאותו חומר ובאותו מפלס')
+  }
+
+  // החלת מידה שהוקלדה על התוכנית
+  const applyDim = () => {
+    if (!dimEdit) return
+    const v = Number(dimEdit.value)
+    const el = variant.elements.find((e) => e.id === dimEdit.id)
+    setDimEdit(null)
+    if (!el || !(v > 0)) return
+    const patch = (x: Element) => upsertElement(project.id, { ...x, label: 'assumed', source: x.source.includes('מידה הוקלדה') ? x.source : `${x.source} · מידה הוקלדה` } as Element)
+    if (el.kind === 'surface') {
+      if (typeof dimEdit.part === 'number') patch(surfaceWithEdge(el, dimEdit.part, v))
+      else if (!el.poly) patch(dimEdit.part === 'w' ? { ...el, w: v } : { ...el, d: v })
+    } else if (el.kind === 'object') {
+      patch(dimEdit.part === 'w' ? { ...el, w: v } : { ...el, d: v })
+    } else if (el.kind === 'wall' || el.kind === 'fence') {
+      const L = Math.hypot(el.x2 - el.x1, el.y2 - el.y1) || 1
+      patch({ ...el, x2: r2(el.x1 + ((el.x2 - el.x1) * v) / L), y2: r2(el.y1 + ((el.y2 - el.y1) * v) / L) })
+    } else if (el.kind === 'line' && typeof dimEdit.part === 'number') {
+      patch({ ...el, pts: setEdgeLength(el.pts, dimEdit.part, v, false).map((p) => ({ x: r2(p.x), y: r2(p.y) })) })
+    }
+  }
+  const openDimEdit = (id: string, part: number | 'w' | 'd' | 'len', value: number, at: Pt) => {
+    const svg = svgRef.current
+    const box = boxRef.current
+    if (!svg || !box) return
+    const m = svg.getScreenCTM()
+    if (!m) return
+    const pt = svg.createSVGPoint()
+    pt.x = at.x
+    pt.y = at.y
+    const sp = pt.matrixTransform(m)
+    const b = box.getBoundingClientRect()
+    setDimEdit({ id, part, value: value.toFixed(2), sx: sp.x - b.left, sy: sp.y - b.top })
+  }
 
   const applyCalibration = () => {
     if (!calib || !permit) return
@@ -513,8 +618,24 @@ export default function PlanTab() {
                   ? 'לחיצה בוחרת אלמנט, גרירה מזיזה אותו. גרירה ברקע מזיזה את התצוגה.'
                   : ''
 
+  const surfacesCount = variant.elements.filter((e) => e.kind === 'surface').length
   return (
     <div className="stack" style={{ gap: 12 }}>
+      <PageIntro
+        art="plan"
+        compact
+        title="כאן מתכננים: כל קו הוא כמות, וכל כמות היא עלות"
+        why={
+          <>
+            בוחרים כלי או פריט ב<b>ספריית הגינה</b> ומשרטטים על גבי ההיתר במטרים. <b>הצמדה</b> מחברת לקודקודים ולצלעות, ומשטחים נוגעים <b>מאותו חומר מתאחדים</b>. לוחצים על אלמנט כדי <b>לערוך, לשכפל, לסובב או למחוק</b>, ועל מידה כדי להקליד מידה חדשה. ביטול: Ctrl+Z.
+          </>
+        }
+        insights={[
+          { k: 'אלמנטים', v: variant.elements.length },
+          { k: 'משטחים', v: surfacesCount },
+          { k: 'ממתינים לאישור', v: pendingCount, tone: pendingCount ? 'warn' : 'good' },
+        ]}
+      />
       <GardenPalette
         group={group}
         setGroup={setGroup}
@@ -534,7 +655,7 @@ export default function PlanTab() {
         hasBasis={hasBasis}
       />
       <div className="editor">
-        <div className="canvas-box">
+        <div className="canvas-box" ref={boxRef} style={{ position: 'relative' }}>
           <div className="toolbar" role="toolbar" aria-label="תצוגה">
             <span className="muted hint" style={{ fontSize: 13, alignSelf: 'center' }}>
               {hint}
@@ -555,19 +676,31 @@ export default function PlanTab() {
                 ביטול נקודה
               </button>
             )}
-            <button className="btn small" onClick={() => zoom(1 / 1.3)}>
-              קרוב
-            </button>
-            <button className="btn small" onClick={() => zoom(1.3)}>
-              רחוק
-            </button>
-            <button className="btn small" onClick={fit}>
-              התאמה
-            </button>
-            <button className={`btn small ${showDims ? 'active' : ''}`} onClick={() => setShowDims((v) => !v)} aria-pressed={showDims}>
-              הצגת מידות
-            </button>
+            <span className="tool-group" role="group" aria-label="ביטול וחזרה">
+              <IconBtn icon="undo" label="ביטול פעולה" iconOnly onClick={() => undo(project.id)} disabled={!canUndo(project)} />
+              <IconBtn icon="redo" label="חזרה על פעולה" iconOnly onClick={() => redo(project.id)} disabled={!canRedo(project)} />
+            </span>
+            <span className="tool-group" role="group" aria-label="תצוגה">
+              <IconBtn icon="zoomIn" label="קרוב" iconOnly onClick={() => zoom(1 / 1.3)} />
+              <IconBtn icon="zoomOut" label="רחוק" iconOnly onClick={() => zoom(1.3)} />
+              <IconBtn icon="fit" label="התאמה" iconOnly onClick={fit} />
+            </span>
+            <IconBtn icon="snap" label="הצמדה" pressed={snapOn} onClick={() => setSnapOn((v) => !v)} />
+            <IconBtn icon="dims" label="הצגת מידות" pressed={showDims} onClick={() => setShowDims((v) => !v)} />
           </div>
+          {selected && hasBasis && tool === 'select' && (
+            <div className="selbar" role="toolbar" aria-label="פעולות על האלמנט הנבחר">
+              <b>{names.get(selected.id)}</b>
+              <span className="muted" style={{ fontSize: 12 }}>
+                לחיצה על מידה על התוכנית משנה אותה
+              </span>
+              <span className="spacer" />
+              {selected.kind !== 'opening' && <IconBtn icon="duplicate" label="שכפול" onClick={duplicateSelected} />}
+              {selected.kind !== 'opening' && <IconBtn icon="rotate" label="סיבוב 90" onClick={rotateSelected} />}
+              {selected.kind === 'surface' && <IconBtn icon="merge" label="חיבור משטחים" onClick={mergeSelected} />}
+              <IconBtn icon="delete" label="מחיקת האלמנט" className="danger" onClick={deleteSelected} />
+            </div>
+          )}
           {status === 'loading' && showBg && !bg && <div className="notice info" style={{ margin: 8 }}>טוען את גיליון התוכנית</div>}
           {status === 'missing' && showBg && <div className="notice" style={{ margin: 8 }}>קובץ ההיתר לא נמצא במכשיר. האלמנטים מוצגים בלי רקע.</div>}
           <svg
@@ -616,7 +749,9 @@ export default function PlanTab() {
             ) : (
               <line x1={pending.x} y1={pending.y} x2={hover.x} y2={hover.y} stroke="#2f5d4a" strokeWidth={k * 3} strokeDasharray={`${k * 5} ${k * 3}`} />
             ))}
-            {hasBasis && showDims && <PlanDims elements={shown} k={k} />}
+            {hasBasis && showDims && <PlanDims elements={shown.filter((e) => e.id !== selId)} k={k} />}
+            {hasBasis && selected && <SelDims e={shown.find((x) => x.id === selected.id) ?? selected} k={k} onEdit={openDimEdit} />}
+            {snapHit && <circle cx={snapHit.x} cy={snapHit.y} r={k * 6} fill="none" stroke="#c0392b" strokeWidth={k * 1.6} />}
             {pending && <circle cx={pending.x} cy={pending.y} r={k * 5} fill="#2f5d4a" />}
             {polyPts.length > 0 && (
               <g>
@@ -657,6 +792,29 @@ export default function PlanTab() {
                   : `${Math.hypot(hover.x - polyPts[polyPts.length - 1].x, hover.y - polyPts[polyPts.length - 1].y).toFixed(2)} מ'`}{' '}
               · הונח
             </div>
+          )}
+          {dimEdit && (
+            <form
+              className="dim-edit"
+              style={{ left: dimEdit.sx, top: dimEdit.sy }}
+              onSubmit={(e) => {
+                e.preventDefault()
+                applyDim()
+              }}
+            >
+              <input
+                autoFocus
+                className="input num"
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                value={dimEdit.value}
+                onChange={(e) => setDimEdit({ ...dimEdit, value: e.target.value })}
+                onBlur={applyDim}
+                aria-label="מידה חדשה במטרים"
+              />
+              <span>מ'</span>
+            </form>
           )}
         </div>
 
@@ -763,6 +921,73 @@ export default function PlanTab() {
 
 const r2 = (v: number) => Math.round(v * 100) / 100
 
+// מידות של האלמנט הנבחר: כל צלע, רוחב ועומק. לחיצה על תווית פותחת הקלדה של מידה חדשה
+function SelDims({ e, k, onEdit }: { e: Element; k: number; onEdit: (id: string, part: number | 'w' | 'd' | 'len', value: number, at: Pt) => void }) {
+  const fs = k * 12
+  const tag = (x: number, y: number, text: string, onClick: () => void, key: string) => (
+    <g
+      key={key}
+      className="dim-tag"
+      onPointerDown={(ev) => {
+        ev.stopPropagation()
+        onClick()
+      }}
+      data-testid="sel-dim"
+    >
+      <rect x={x - fs * 2.6} y={y - fs * 0.75} width={fs * 5.2} height={fs * 1.5} rx={fs * 0.4} fill="#1d2120" opacity={0.86} />
+      <text x={x} y={y} fontSize={fs} textAnchor="middle" dominantBaseline="central" fill="#fff" style={{ fontFamily: 'IBM Plex Mono, monospace' }}>
+        {text}
+      </text>
+    </g>
+  )
+  // תווית מחוץ לצלע: הסטה בניצב לכיוון מרכז הצורה
+  const edgeTags = (pts: Pt[], closed: boolean) => {
+    const c = pts.reduce((a, p) => ({ x: a.x + p.x / pts.length, y: a.y + p.y / pts.length }), { x: 0, y: 0 })
+    const n = closed ? pts.length : pts.length - 1
+    const out = []
+    for (let i = 0; i < n; i++) {
+      const a = pts[i]
+      const b = pts[(i + 1) % pts.length]
+      const L = Math.hypot(b.x - a.x, b.y - a.y)
+      if (L < 0.05) continue
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+      let nx = -(b.y - a.y) / L
+      let ny = (b.x - a.x) / L
+      if ((m.x + nx - c.x) ** 2 + (m.y + ny - c.y) ** 2 < (m.x - c.x) ** 2 + (m.y - c.y) ** 2) {
+        nx = -nx
+        ny = -ny
+      }
+      const at = closed ? { x: m.x + nx * fs * 1.4, y: m.y + ny * fs * 1.4 } : { x: m.x + nx * fs * 1.2, y: m.y + ny * fs * 1.2 }
+      out.push(tag(at.x, at.y, `${L.toFixed(2)}`, () => onEdit(e.id, i, L, at), `e${i}`))
+    }
+    return out
+  }
+  switch (e.kind) {
+    case 'surface':
+      return <g data-testid="sel-dims">{edgeTags(surfacePoly(e), true)}</g>
+    case 'line':
+      return <g data-testid="sel-dims">{edgeTags(e.pts, false)}</g>
+    case 'wall':
+    case 'fence': {
+      const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
+      const at = { x: (e.x1 + e.x2) / 2, y: (e.y1 + e.y2) / 2 - fs * 1.4 }
+      return <g data-testid="sel-dims">{tag(at.x, at.y, L.toFixed(2), () => onEdit(e.id, 'len', L, at), 'len')}</g>
+    }
+    case 'object': {
+      const w = { x: e.x, y: e.y - e.d / 2 - fs * 1.3 }
+      const d = { x: e.x + e.w / 2 + fs * 3, y: e.y }
+      return (
+        <g data-testid="sel-dims">
+          {tag(w.x, w.y, e.w.toFixed(2), () => onEdit(e.id, 'w', e.w, w), 'w')}
+          {tag(d.x, d.y, e.d.toFixed(2), () => onEdit(e.id, 'd', e.d, d), 'd')}
+        </g>
+      )
+    }
+    default:
+      return null
+  }
+}
+
 // סדר ציור: משטחים מתחת, אחריהם קווים, קירות ופריטים, ושרטוט חופשי מעל
 const order = (e: Element) => (e.kind === 'surface' ? 0 : e.kind === 'line' ? 1 : e.kind === 'fence' || e.kind === 'wall' ? 2 : e.kind === 'opening' ? 3 : e.kind === 'object' ? 4 : 5)
 
@@ -856,17 +1081,22 @@ function PlanDims({ elements, k }: { elements: Element[]; k: number }) {
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
           if (L < 0.5) return null
-          return label(e.id, (e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2 - fs, `${fmtNum(L)} מ' · ${tag}`)
+          return label(e.id, (e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2 - fs, `${fmtNum(L)}${e.kind === 'wall' ? ` × ${fmtNum(e.thickness)}` : ''} מ' · ${tag}`)
         }
         if (e.kind === 'surface') {
           const c = e.poly ? e.poly.reduce((a, p) => ({ x: a.x + p.x / e.poly!.length, y: a.y + p.y / e.poly!.length }), { x: 0, y: 0 }) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          return label(e.id, c.x, c.y, `${fmtNum(surfaceArea(e), 1)} מ"ר · ${tag}`, '#2f5d4a')
+          return (
+            <g key={e.id}>
+              {label(`${e.id}a`, c.x, c.y - fs * 0.6, `${fmtNum(surfaceArea(e))} מ"ר · ${tag}`, '#2f5d4a')}
+              {label(`${e.id}b`, c.x, c.y + fs * 0.7, `${fmtNum(e.w)} × ${fmtNum(e.d)} מ'`, '#48546b')}
+            </g>
+          )
         }
         if (e.kind === 'line') {
           const m = e.pts[Math.floor(e.pts.length / 2)]
-          return m ? label(e.id, m.x, m.y - fs, `${fmtNum(polyLength(e.pts), 1)} מ' · ${tag}`, '#2f5d4a') : null
+          return m ? label(e.id, m.x, m.y - fs, `${fmtNum(polyLength(e.pts))} × ${fmtNum(e.width)} מ' · ${tag}`, '#2f5d4a') : null
         }
-        if (e.kind === 'object') return label(e.id, e.x, e.y + e.d / 2 + fs, `${fmtNum(e.w, 1)}×${fmtNum(e.d, 1)} · ${tag}`, '#48546b')
+        if (e.kind === 'object') return label(e.id, e.x, e.y + e.d / 2 + fs, `${fmtNum(e.w)}×${fmtNum(e.d)} · ${tag}`, '#48546b')
         return null
       })}
     </g>

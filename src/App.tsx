@@ -16,6 +16,8 @@ const PermitTab = lazy(() => import('./pages/PermitTab'))
 const PlanTab = lazy(() => import('./pages/PlanTab'))
 const DimsTab = lazy(() => import('./pages/DimsTab'))
 const ModelTab = lazy(() => import('./pages/ModelTab'))
+const DesignTab = lazy(() => import('./pages/DesignTab'))
+const Guide = lazy(() => import('./pages/Guide'))
 
 export default function App() {
   return (
@@ -30,6 +32,7 @@ export default function App() {
               <Route index element={<Overview />} />
               <Route path="permit" element={<PermitTab />} />
               <Route path="dims" element={<DimsTab />} />
+              <Route path="design" element={<DesignTab />} />
               <Route path="plan" element={<PlanTab />} />
               <Route path="model" element={<ModelTab />} />
               <Route path="bom" element={<BomTab />} />
@@ -37,6 +40,7 @@ export default function App() {
               <Route path="variants" element={<VariantsTab />} />
             </Route>
             <Route path="/prices" element={<Prices />} />
+            <Route path="/guide" element={<Guide />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

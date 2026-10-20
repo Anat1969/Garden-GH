@@ -6,6 +6,7 @@ import { buildShaniProject } from '../data/shaniProject'
 import { Empty, Loading, Rise, toast } from '../components/ui'
 import { DraftDocs, type DraftDoc } from '../components/Documents'
 import { PlanThumb } from '../components/PlanThumb'
+import { PageIntro } from '../components/PageIntro'
 import { addDocuments, readableAsPermit } from '../lib/docs'
 
 function ProjectCard({ p, delay }: { p: Project; delay: number }) {
@@ -129,10 +130,21 @@ export default function Projects() {
 
   return (
     <div className="stack" style={{ gap: 24 }}>
-      <Rise>
-        <div className="eyebrow">ספרייה</div>
-        <h1 className="h-page">פרויקטים</h1>
-      </Rise>
+      <h1 className="h-page">פרויקטים</h1>
+      <PageIntro
+        art="projects"
+        title="כל גינה היא פרויקט: היתר, מסמכים, תכנון וחלופות"
+        why={
+          <>
+            יוצרים פרויקט עם <b>מסמכים מכל סוג</b>, וההיתר נקרא אוטומטית. בכל כרטיס רואים את <b>תוכנית הבית והגינה</b>, ואפשר <b>לערוך או למחוק</b>.
+          </>
+        }
+        insights={[
+          { k: 'פרויקטים', v: projects.length },
+          { k: 'עם היתר', v: projects.filter((p) => p.permit).length },
+          { k: 'מסמכים', v: projects.reduce((a, p) => a + (p.documents?.length ?? 0), 0) },
+        ]}
+      />
 
       <form className="card" onSubmit={(e) => void create(e)}>
         <div className="h-section" style={{ marginBottom: 10 }}>

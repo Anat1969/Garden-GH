@@ -61,8 +61,14 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await expect(page.locator('#system-menu')).toHaveCount(0)
   await menu(page)
   await page.getByRole('link', { name: 'מחירון' }).first().click()
-  await expect(page.getByRole('heading', { name: 'מחירון' })).toBeVisible()
-  await expect(page.getByText('מחירון לא נטען').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'מחירון', exact: true })).toBeVisible()
+  // טבלה ציבורית נטענת כברירת מחדל, עם מיון וקיבוץ
+  await expect(page.getByTestId('prices-table')).toBeVisible()
+  await page.getByRole('button', { name: 'מיון לפי מחיר' }).click()
+  await page.getByRole('button', { name: 'מיון לפי מחיר' }).click()
+  await page.getByLabel('קיבוץ לפי').selectOption('unit')
+  await page.getByLabel('קיבוץ לפי').selectOption('')
+  await page.screenshot({ path: 'shots/06a-prices-default.png', fullPage: true })
   await page.getByRole('link', { name: /Garden-GH/ }).click()
   await expect(page).toHaveURL(/\/$/)
 
@@ -143,8 +149,8 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   // כתב כמויות בלי מחירון
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
   await expect(page.getByText('הערכה בלבד עד לאישור מול מחירון מעודכן וספק.').first()).toBeVisible()
-  await expect(page.getByText(/מחירון לא נטען/).first()).toBeVisible()
-  await page.getByRole('link', { name: 'טעינת מחירון' }).click()
+  await menu(page)
+  await page.getByRole('link', { name: 'מחירון' }).first().click()
   page.once('dialog', (d) => d.accept())
   await page.getByRole('button', { name: 'מחירון דוגמה לא מאומת' }).click()
   await expect(page.getByText('S-06')).toBeVisible()
@@ -167,14 +173,14 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await page.getByLabel('שם החלופה').fill('חלופה חסכונית')
   await page.getByRole('button', { name: 'יצירת חלופה' }).click()
   await expect(page.locator('select').first()).toHaveValue(/.+/)
-  await expect(page.getByText('פעילה', { exact: true })).toBeVisible()
+  await expect(page.locator('span.lbl', { hasText: 'פעילה' })).toBeVisible()
   await page.getByRole('button', { name: 'הפעלה' }).click()
   await page.screenshot({ path: 'shots/09-variants.png', fullPage: true })
 
   // סקירה
   await page.getByRole('link', { name: 'סקירה' }).click()
   await page.getByPlaceholder('פינת ישיבה, משחק לילדים, ערוגות ירק').fill('פינת ישיבה')
-  await expect(page.getByText('הצעד הבא')).toBeVisible()
+  await expect(page.getByText('הצעד הבא').first()).toBeVisible()
 
   // העתקת קישור
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])

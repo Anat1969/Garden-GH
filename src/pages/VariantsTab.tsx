@@ -3,6 +3,7 @@ import { useProject } from './ProjectLayout'
 import { newVariant, updateProject, useApp } from '../lib/store'
 import { computeBom, fmtMoney, sumRange } from '../lib/bom'
 import { Rise, toast } from '../components/ui'
+import { PageIntro } from '../components/PageIntro'
 import type { Variant } from '../lib/types'
 
 export default function VariantsTab() {
@@ -29,6 +30,20 @@ export default function VariantsTab() {
 
   return (
     <div className="stack" style={{ gap: 16 }}>
+      <PageIntro
+        art="variants"
+        title="כמה כיוונים לאותה גינה, והשוואה ביניהם"
+        why={
+          <>
+            כל <b>חלופה</b> היא עותק עצמאי של התכנון: ידני, <b>הצעה אוטומטית בסגנון</b> מסוים, או גרסה חסכונית. ההשוואה מראה <b>הפרש עלות</b> מול הגרסה הבסיסית, וההיתר וקנה המידה משותפים לכולן.
+          </>
+        }
+        insights={[
+          { k: 'חלופות', v: project.variants.length },
+          { k: 'פעילה', v: variant.name },
+          { k: 'בסיסית', v: baseStats.max ? `${fmtMoney(baseStats.min)} עד ${fmtMoney(baseStats.max)}` : 'אין מחירים' },
+        ]}
+      />
       <form className="card" onSubmit={create}>
         <div className="h-section">חלופה חדשה</div>
         <div className="muted" style={{ fontSize: 14, margin: '4px 0 10px' }}>

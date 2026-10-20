@@ -1,3 +1,4 @@
+import { DataTable } from './DataTable'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -288,34 +289,36 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
               </select>
             </label>
           </div>
-          <div className="table-wrap" style={{ marginTop: 10 }}>
-            <table className="t">
-              <thead>
-                <tr>
-                  <th>סימון</th>
-                  <th>גובה יחסי</th>
-                  <th>מוחלט</th>
-                  <th>משמעות</th>
-                  <th>שרטוט</th>
-                </tr>
-              </thead>
-              <tbody>
-                {uniqLevels(b.levels).slice(0, 40).map((l, i) => (
-                  <tr key={i}>
-                    <td className="mono">{l.text}</td>
-                    <td>
-                      <span className="numwrap">
-                        <span className="num">{l.rel >= 0 ? '+' : ''}{l.rel.toFixed(2)}</span>
-                        <Tag label="estimated" />
-                      </span>
-                    </td>
-                    <td className="num">{l.abs ? l.abs.toFixed(2) : ''}</td>
-                    <td>{MEANING_TEXT[l.meaning] ?? l.meaning}</td>
-                    <td className="muted">{l.drawing}{l.count > 1 ? ` ועוד ${l.count - 1}` : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ marginTop: 10 }}>
+            <DataTable
+              testId="levels-table"
+              caption="גבהים מההיתר"
+              rows={uniqLevels(b.levels).slice(0, 40).map((l, i) => ({ ...l, key: `${i}` }))}
+              rowKey={(l) => l.key}
+              defaultSort={{ key: 'rel', dir: 'asc' }}
+              selectable={false}
+              groups={[
+                { key: 'meaning', label: 'משמעות', value: (l) => MEANING_TEXT[l.meaning] ?? l.meaning },
+                { key: 'drawing', label: 'שרטוט', value: (l) => l.drawing },
+              ]}
+              cols={[
+                { key: 'text', label: 'סימון', sort: (l) => l.text, render: (l) => <span className="mono">{l.text}</span> },
+                {
+                  key: 'rel',
+                  label: 'גובה יחסי',
+                  sort: (l) => l.rel,
+                  render: (l) => (
+                    <span className="numwrap">
+                      <span className="num">{l.rel >= 0 ? '+' : ''}{l.rel.toFixed(2)}</span>
+                      <Tag label="estimated" />
+                    </span>
+                  ),
+                },
+                { key: 'abs', label: 'מוחלט', sort: (l) => l.abs ?? null, render: (l) => <span className="num">{l.abs ? l.abs.toFixed(2) : ''}</span> },
+                { key: 'meaning', label: 'משמעות', sort: (l) => MEANING_TEXT[l.meaning] ?? l.meaning, render: (l) => MEANING_TEXT[l.meaning] ?? l.meaning },
+                { key: 'drawing', label: 'שרטוט', sort: (l) => l.drawing, render: (l) => <span className="muted">{l.drawing}{l.count > 1 ? ` ועוד ${l.count - 1}` : ''}</span> },
+              ]}
+            />
           </div>
           <div className="muted" style={{ fontSize: 13, marginTop: 6 }}>
             גבהים ובטיחות מבנית: דורש מהנדס מוסמך. הקריאה מיועדת לתכנון הגינה ולהמחשה בלבד.

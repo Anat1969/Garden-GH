@@ -132,6 +132,9 @@ export function TopBar() {
               <Link className={`menu-item ${here('/prices') ? 'active' : ''}`} to="/prices">
                 מחירון
               </Link>
+              <Link className={`menu-item ${here('/guide') ? 'active' : ''}`} to="/guide">
+                מדריך גינות
+              </Link>
             </nav>
             <div className="menu-group">
               <button className="menu-item" onClick={copyLink}>
