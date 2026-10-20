@@ -31,7 +31,36 @@ export interface PermitPage {
 export interface ScaleInfo {
   metersPerPt: number | null
   den: number | null
-  source: 'text' | 'calibrated' | 'manual-only' | null
+  source: 'text' | 'calibrated' | 'dimensions' | 'manual-only' | null
+}
+
+// מידה שנקראה מההיתר. קואורדינטות ביחידות העמוד (נקודות PDF; בתמונה: פיקסל אחד = נקודה אחת).
+export type DimKind = 'length' | 'level'
+export type DimStatus = 'pending' | 'confirmed' | 'rejected'
+
+export interface PlanDimension {
+  id: string
+  page: number
+  raw: string
+  value: number // במטרים. למפלס: הערך כפי שנכתב, במטרים
+  unit: 'cm' | 'm' | 'mm'
+  kind: DimKind
+  relative: boolean // מפלס יחסי (±0.00, +0.40)
+  orientation: 'h' | 'v' | 'other'
+  box: { x: number; y: number; w: number; h: number }
+  line: { x1: number; y1: number; x2: number; y2: number } | null
+  agrees: boolean | null // האם אורך קו המידה תואם לקנה המידה
+  source: 'text-layer' | 'ai'
+  confidence: 'high' | 'medium' | 'low'
+  status: DimStatus
+}
+
+export interface DimScale {
+  page: number
+  metersPerPt: number
+  support: number
+  total: number
+  spread: number
 }
 
 export interface Permit {
@@ -44,6 +73,10 @@ export interface Permit {
   detectedAt?: string
   detection?: { walls: number; openings: number }
   cloudPath?: string
+  sourceType?: 'pdf' | 'image'
+  dims?: PlanDimension[]
+  dimScales?: DimScale[]
+  aiReadAt?: string
 }
 
 interface Base {

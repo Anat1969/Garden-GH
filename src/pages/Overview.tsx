@@ -57,9 +57,9 @@ export default function Overview() {
         <div className="card flat stat">
           <span className="k">קנה מידה</span>
           <span className="v">
-            {project.permit?.scale.den ? `1:${project.permit.scale.den}` : project.permit?.scale.source === 'calibrated' ? 'כויל ידנית' : project.permit?.scale.source === 'manual-only' ? 'מידות ידניות' : NO_BASIS}
+            {project.permit?.scale.source === 'dimensions' ? (project.permit.sourceType === 'image' ? 'מהמידות' : `1:${project.permit.scale.den} מהמידות`) : project.permit?.scale.den ? `1:${project.permit.scale.den}` : project.permit?.scale.source === 'calibrated' ? 'כויל ידנית' : project.permit?.scale.source === 'manual-only' ? 'מידות ידניות' : NO_BASIS}
           </span>
-          {project.permit?.scale.source === 'text' && <Tag label="measured" />}
+          {(project.permit?.scale.source === 'text' || project.permit?.scale.source === 'dimensions') && <Tag label="measured" />}
           {project.permit?.scale.source === 'calibrated' && <Tag label="estimated" />}
           {project.permit?.scale.source === 'manual-only' && <Tag label="assumed" />}
         </div>

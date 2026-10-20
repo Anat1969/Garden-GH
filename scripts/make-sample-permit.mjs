@@ -1,5 +1,5 @@
 // יוצר היתר לדוגמה וקטורי (public/sample-permit.pdf) לבדיקות ולהדגמה.
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
 import { writeFileSync } from 'node:fs'
 
 const W = 1190, H = 842 // A3 לרוחב
@@ -62,10 +62,39 @@ function sheet(title, scaleDen) {
   R(t, 4.5, 1.75, ti); R(2.9, 4.5, 3.1, ti)
   arc(2, 4.5 + ti, 0.9, [1, 1])
   page.drawText('LIVING', { x: ox + 8 * k, y: H - (oy + 4 * k), size: 10, font, color: ink })
-  page.drawText('+0.00', { x: ox + 2 * k, y: H - (oy + 2 * k), size: 9, font, color: ink })
-  // קו מידה
-  page.drawLine({ start: { x: ox, y: H - (oy - 1 * k) }, end: { x: ox + 12 * k, y: H - (oy - 1 * k) }, thickness: 0.3, color: ink })
-  page.drawText('12.00', { x: ox + 5.6 * k, y: H - (oy - 1.2 * k), size: 8, font, color: ink })
+
+  // שרשראות מידות בס"מ, עם קווי עזר ושנתות אלכסוניות כמו בהיתר
+  const PX = (x) => ox + x * k
+  const PY = (y) => H - (oy + y * k)
+  const tick = (x, y) => page.drawLine({ start: { x: PX(x) - 3, y: PY(y) - 3 }, end: { x: PX(x) + 3, y: PY(y) + 3 }, thickness: 0.8, color: ink })
+  const chainH = (y, xs) => {
+    page.drawLine({ start: { x: PX(xs[0]), y: PY(y) }, end: { x: PX(xs[xs.length - 1]), y: PY(y) }, thickness: 0.3, color: ink })
+    xs.forEach((x) => tick(x, y))
+    for (let i = 0; i < xs.length - 1; i++) {
+      const t = String(Math.round((xs[i + 1] - xs[i]) * 100))
+      const w = font.widthOfTextAtSize(t, 7)
+      page.drawText(t, { x: (PX(xs[i]) + PX(xs[i + 1])) / 2 - w / 2, y: PY(y) + 2, size: 7, font, color: ink })
+    }
+  }
+  const chainV = (x, ys) => {
+    page.drawLine({ start: { x: PX(x), y: PY(ys[0]) }, end: { x: PX(x), y: PY(ys[ys.length - 1]) }, thickness: 0.3, color: ink })
+    ys.forEach((y) => tick(x, y))
+    for (let i = 0; i < ys.length - 1; i++) {
+      const t = String(Math.round((ys[i + 1] - ys[i]) * 100))
+      const w = font.widthOfTextAtSize(t, 7)
+      page.drawText(t, { x: PX(x) - 2, y: (PY(ys[i]) + PY(ys[i + 1])) / 2 - w / 2, size: 7, font, color: ink, rotate: degrees(90) })
+    }
+  }
+  chainH(-0.8, [0, 3, 4.5, 8, 9.5, 12])
+  chainH(-1.6, [0, 12])
+  chainH(9.8, [0, 5, 6, 9, 10.5, 12])
+  chainV(-0.8, [0, 3, 4.2, 9])
+  chainV(-1.6, [0, 9])
+  // מפלסים
+  page.drawText('\u00b10.00', { x: PX(2), y: PY(2), size: 8, font, color: ink })
+  page.drawText('699.00', { x: PX(2), y: PY(2.4), size: 8, font, color: ink })
+  page.drawText('-0.45', { x: PX(13.2), y: PY(5.5), size: 8, font, color: ink })
+  page.drawText('698.55', { x: PX(13.2), y: PY(5.9), size: 8, font, color: ink })
 }
 
 // עמוד 3: חזית 1:100

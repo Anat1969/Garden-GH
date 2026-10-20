@@ -14,6 +14,7 @@ import NotFound from './pages/NotFound'
 
 const PermitTab = lazy(() => import('./pages/PermitTab'))
 const PlanTab = lazy(() => import('./pages/PlanTab'))
+const DimsTab = lazy(() => import('./pages/DimsTab'))
 const ModelTab = lazy(() => import('./pages/ModelTab'))
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/p/:id" element={<ProjectLayout />}>
               <Route index element={<Overview />} />
               <Route path="permit" element={<PermitTab />} />
+              <Route path="dims" element={<DimsTab />} />
               <Route path="plan" element={<PlanTab />} />
               <Route path="model" element={<ModelTab />} />
               <Route path="bom" element={<BomTab />} />

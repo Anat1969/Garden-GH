@@ -6,6 +6,8 @@ import { savePdf } from '../lib/idb'
 import { uid, updateProject, updateVariant, uploadPermitToCloud } from '../lib/store'
 import { usePermitDoc } from '../lib/usePermit'
 import type { PageKind, Permit, ScaleInfo } from '../lib/types'
+import { readTextLayerDims, reliableDimScale, denFromMpp } from '../lib/dims'
+import { IMAGE_TYPES, imageToPdf } from '../lib/imageToPdf'
 import { PAGE_KIND_TEXT } from '../lib/types'
 import { NO_BASIS } from '../lib/bom'
 import { ErrorState, Loading, Rise, Tag, toast } from '../components/ui'
@@ -42,7 +44,7 @@ export default function PermitTab() {
     }
   }, [doc, permit?.fileName, permit?.pageCount])
 
-  const ingest = async (bytes: ArrayBuffer, fileName: string) => {
+  const ingest = async (bytes: ArrayBuffer, fileName: string, sourceType: 'pdf' | 'image' = 'pdf') => {
     setError(null)
     setResult(null)
     try {
@@ -50,14 +52,31 @@ export default function PermitTab() {
       const d = await openPdf(bytes)
       const pages = await analyzePages(d, (i) => setBusy(`מנתחת עמוד ${i} מתוך ${d.numPages}`))
       const planPage = pickPlanPage(pages)
-      const den = pages.find((p) => p.index === planPage)?.scaleDen ?? null
-      const scale: ScaleInfo = den ? { den, metersPerPt: den * PT_TO_M_AT_1, source: 'text' } : { den: null, metersPerPt: null, source: null }
+      const { dims, dimScales } = await readTextLayerDims(d, d.numPages, uid, (i) => setBusy(`קוראת מידות בעמוד ${i}`))
+      const den = sourceType === 'image' ? null : pages.find((p) => p.index === planPage)?.scaleDen ?? null
+      const ds = dimScales.find((x) => x.page === planPage)
+      const scale: ScaleInfo = den
+        ? { den, metersPerPt: den * PT_TO_M_AT_1, source: 'text' }
+        : reliableDimScale(ds)
+          ? { den: Math.round(denFromMpp(ds!.metersPerPt)), metersPerPt: ds!.metersPerPt, source: 'dimensions' }
+          : { den: null, metersPerPt: null, source: null }
       await savePdf(project.id, bytes)
       const cloudPath = (await uploadPermitToCloud(project.id, bytes)) ?? undefined
-      const newPermit: Permit = { fileName, declaredType: declared, pageCount: d.numPages, pages, planPage, scale, cloudPath }
+      const newPermit: Permit = {
+        fileName,
+        declaredType: sourceType === 'image' ? 'scan' : declared,
+        pageCount: d.numPages,
+        pages,
+        planPage,
+        scale,
+        cloudPath,
+        sourceType,
+        dims,
+        dimScales,
+      }
       updateProject(project.id, (p) => ({ ...p, permit: newPermit }))
       setVersion((v) => v + 1)
-      toast(`נטענו ${d.numPages} עמודים`)
+      toast(dims.length ? `נטענו ${d.numPages} עמודים ונקראו ${dims.length} מידות` : `נטענו ${d.numPages} עמודים`)
     } catch (e) {
       console.error(e)
       setError('לא הצלחתי לקרוא את הקובץ. ודאי שזה PDF תקין ולא מוגן בסיסמה.')
@@ -68,23 +87,36 @@ export default function PermitTab() {
 
   const onFile = async (f: File | undefined) => {
     if (!f) return
-    if (f.type && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
-      setError('יש להעלות קובץ PDF')
+    const isImage = IMAGE_TYPES.includes(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+    if (!isImage && !isPdf) {
+      setError('יש להעלות PDF או תמונה (PNG, JPEG)')
       return
     }
     if (f.size > 60 * 1024 * 1024) {
       setError('הקובץ גדול מ-60MB. כדאי לפצל את ההיתר.')
       return
     }
+    if (isImage) {
+      try {
+        setBusy('ממירה את התמונה')
+        await ingest(await imageToPdf(f), f.name, 'image')
+      } catch {
+        setBusy(null)
+        setError('לא הצלחתי לפתוח את התמונה. נסי PNG או JPEG.')
+      }
+      return
+    }
     await ingest(await f.arrayBuffer(), f.name)
   }
 
-  const loadSample = async () => {
+  const loadSample = async (kind: 'pdf' | 'scan' = 'pdf') => {
     try {
       setBusy('טוענת היתר לדוגמה')
-      const res = await fetch('/sample-permit.pdf')
+      const res = await fetch(kind === 'pdf' ? '/sample-permit.pdf' : '/sample-scan.jpg')
       if (!res.ok) throw new Error()
-      await ingest(await res.arrayBuffer(), 'היתר לדוגמה.pdf')
+      if (kind === 'pdf') await ingest(await res.arrayBuffer(), 'היתר לדוגמה.pdf')
+      else await ingest(await imageToPdf(await res.blob()), 'סריקה לדוגמה.jpg', 'image')
     } catch {
       setBusy(null)
       setError('טעינת ההיתר לדוגמה נכשלה')
@@ -152,7 +184,7 @@ export default function PermitTab() {
           <p className="muted" style={{ margin: '4px 0 14px' }}>
             {status === 'missing'
               ? 'הנתונים נשמרו, אבל קובץ ה-PDF הועלה ממכשיר אחר. אפשר להעלות אותו שוב.'
-              : 'קובץ PDF של ההיתר: תוכניות, חזיתות, חתכים ותשריט. ההיתר נשמר במכשיר, ובענן כשמחוברים.'}
+              : 'PDF של ההיתר, או תמונה וסריקה (PNG, JPEG): תוכניות, חזיתות, חתכים ותשריט. ההיתר נשמר במכשיר, ובענן כשמחוברים.'}
           </p>
           <div className="row" style={{ marginBottom: 14 }} role="radiogroup" aria-label="סוג הקובץ">
             <span className="muted">סוג הקובץ:</span>
@@ -177,16 +209,19 @@ export default function PermitTab() {
               void onFile(e.dataTransfer.files[0])
             }}
           >
-            <div className="h-section">גוררים לכאן PDF</div>
+            <div className="h-section">גוררים לכאן PDF או תמונה</div>
             <div className="row" style={{ justifyContent: 'center' }}>
               <button className="btn primary" onClick={() => fileRef.current?.click()}>
                 בחירת קובץ
               </button>
-              <button className="btn" onClick={loadSample}>
+              <button className="btn" onClick={() => loadSample('pdf')}>
                 היתר לדוגמה
               </button>
+              <button className="btn" onClick={() => loadSample('scan')}>
+                סריקה לדוגמה
+              </button>
             </div>
-            <input ref={fileRef} type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void onFile(e.target.files?.[0])} data-testid="pdf-input" />
+            <input ref={fileRef} type="file" accept="application/pdf,.pdf,image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" hidden onChange={(e) => void onFile(e.target.files?.[0])} data-testid="pdf-input" />
           </div>
         </Rise>
       )}
@@ -239,6 +274,18 @@ export default function PermitTab() {
                   נמצא בטקסט של העמוד
                 </span>
               </div>
+            ) : permit.scale.source === 'dimensions' ? (
+              <div className="row">
+                {permit.sourceType !== 'image' && permit.scale.den && (
+                  <span className="num" style={{ fontSize: 22 }}>
+                    1:{permit.scale.den}
+                  </span>
+                )}
+                <Tag label="measured" />
+                <span className="muted" style={{ fontSize: 14 }}>
+                  חושב מהמידות הכתובות בגיליון ומאורך קווי המידה
+                </span>
+              </div>
             ) : permit.scale.source === 'calibrated' ? (
               <div className="row">
                 <span>כויל ידנית מול מידה ידועה</span>
@@ -250,10 +297,16 @@ export default function PermitTab() {
                 <Tag label="assumed" />
               </div>
             ) : (
-              <div className="notice danger">{NO_BASIS}. קנה המידה לא נמצא בעמוד. בלי קנה מידה לא מחשבים כמויות.</div>
+              <div className="notice danger">
+                {NO_BASIS}. {permit.sourceType === 'image' ? 'בסריקה קנה המידה נקבע מהמידות הכתובות או מכיול.' : 'קנה המידה לא נמצא בעמוד.'} בלי קנה מידה לא מחשבים כמויות.
+              </div>
             )}
+            <DimCheck permit={permit} />
             <div className="row" style={{ marginTop: 12 }}>
-              <label className="field" style={{ width: 170 }}>
+              <Link className="btn primary" to="../dims" style={{ alignSelf: 'end' }}>
+                מידות מההיתר
+              </Link>
+              <label className="field" style={{ width: 170, display: permit.sourceType === 'image' ? 'none' : undefined }}>
                 <span>קביעה ידנית מהגיליון</span>
                 <select className="input" value={permit.scale.source === 'text' ? String(permit.scale.den) : ''} onChange={(e) => setDen(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">לא נבחר</option>
@@ -327,6 +380,23 @@ export default function PermitTab() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// השוואה בין קנה המידה הפעיל לבין מה שהמידות הכתובות מראות
+function DimCheck({ permit }: { permit: Permit }) {
+  const ds = permit.dimScales?.find((x) => x.page === permit.planPage)
+  const onPage = (permit.dims ?? []).filter((d) => d.page === permit.planPage)
+  if (!onPage.length) return null
+  const diff = ds && permit.scale.metersPerPt ? ds.metersPerPt / permit.scale.metersPerPt - 1 : null
+  return (
+    <div className={`notice ${diff !== null && Math.abs(diff) > 0.03 ? 'danger' : 'info'}`} style={{ marginTop: 10 }}>
+      בעמוד נקראו {onPage.length} מידות.{' '}
+      {ds
+        ? `${ds.support} מהן מתאימות לאורך קווי המידה${permit.sourceType !== 'image' ? `, קנה מידה 1:${denFromMpp(ds.metersPerPt).toFixed(1)}` : ''}.`
+        : 'עוד לא נמצאו קווי מידה תואמים.'}
+      {diff !== null && (Math.abs(diff) <= 0.03 ? ' תואם לקנה המידה הפעיל.' : ` סטייה של ${(diff * 100).toFixed(1)}% מקנה המידה הפעיל. כדאי לבדוק.`)}
     </div>
   )
 }

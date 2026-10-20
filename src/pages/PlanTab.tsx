@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { usePermitDoc } from '../lib/usePermit'
 import { PT_TO_M_AT_1, renderPage } from '../lib/pdf'
-import { uid, updateProject, updateVariant, upsertElement } from '../lib/store'
+import { setPlanScale, uid, updateProject, updateVariant, upsertElement } from '../lib/store'
+import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, Opening, OpeningType, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { MATERIAL_COLOR, MATERIAL_TEXT } from '../lib/types'
 import { NO_BASIS, numberedNames } from '../lib/bom'
@@ -340,6 +341,10 @@ export default function PlanTab() {
     )
   }
 
+  const calibDims = (permit?.dims ?? [])
+    .filter((d) => d.page === permit?.planPage && d.kind === 'length' && d.line && (d.status === 'confirmed' || d.source === 'text-layer'))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
   const pendingCount = variant.elements.filter((e) => !e.approved && (e.kind === 'wall' || e.kind === 'opening')).length
   const strokeK = view.w / 900
 
@@ -457,6 +462,28 @@ export default function PlanTab() {
               </button>
             </div>
             {hasBasis && <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>כיול חוזר משנה את קנה המידה של כל האלמנטים בהתאם.</div>}
+            {calibDims.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+                  או כיול לפי מידה כתובה בהיתר (מאושרת):
+                </div>
+                <div className="row" style={{ gap: 6 }}>
+                  {calibDims.map((d) => (
+                    <button
+                      key={d.id}
+                      className="btn small"
+                      onClick={() => {
+                        setPlanScale(project.id, { den: null, metersPerPt: d.value / segLen(d.line!), source: 'calibrated' })
+                        toast(`כויל לפי המידה ${d.raw}`)
+                        setTool('select')
+                      }}
+                    >
+                      {dimLabelText(d)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
