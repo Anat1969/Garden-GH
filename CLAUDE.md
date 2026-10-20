@@ -61,7 +61,13 @@
 - src/lib/store.ts: מקומי-תחילה (localStorage, PDF ב-IndexedDB), סנכרון ל-garden_projects ו-garden_price_items כשמחוברים.
 - src/lib/bom.ts: כמויות, שיוך לסעיפי מחירון לפי קטגוריה, טווחי עלות ושלבים.
 - נתוני פרויקט נשמרים כ-jsonb בעמודה data (חלופות ואלמנטים בתוכו), לא בטבלאות נפרדות.
-- בדיקות: npm run build ואז npx playwright test (מוקים ל-Supabase, היתר לדוגמה ב-public/sample-permit.pdf).
+- src/lib/dims.ts: מידות משכבת הטקסט של PDF וקטורי, קווי מידה ושרשראות (שנתות), קנה מידה מהמידות.
+- src/lib/permitReader.ts: קריאת היתר כמו שרטט: חלוקת גיליון ארוך לפנלים, מיפוי שרטוטים (map), קריאת מבנה וגינה (structure), קריאת גבהים מחתכים וחזיתות (heights).
+- src/lib/structureToElements.ts: מהקריאה לאלמנטים: קירות בית מקו המתאר (הסטה פנימה בחצי עובי), פתחים, גבול מגרש כגדר, קירות פיתוח, אזורי גינה כמצולעים עם מפלס יחסי ל-±0.00.
+- supabase/functions/garden-read-plan: Claude vision (claude-opus-5-5), משימות dims, map, structure, heights. משתמשת בסוד ANTHROPIC_API_KEY של הפרויקט. verify_jwt כבוי, הגנת Origin.
+- בדיקות: npm run build ואז npx playwright test (מוקים ל-Supabase ולפונקציה, היתר לדוגמה ב-public/sample-permit.pdf וסריקה ב-public/sample-scan.jpg).
 
 ## תיקונים שנאספו
+- האפליקציה צריכה לקרוא היתר כמו שרטט ואדריכל נוף: גיליון סרוק עם הרבה שרטוטים, תוכניות, חזיתות, חתכים ותשריט, ולבנות מהם את הבניין וקומת הקרקע בתלת-ממד עם כל המידות. הגינה של ענת: קומת קרקע, דרום-מערב.
+- היתרים אמיתיים מגיעים כסריקה (בלי שכבת טקסט), לפעמים כגיליון ארוך מאוד (כמה מטרים). כל שרטוט נקרא בנפרד, וקנה המידה נבדק מול המידות הכתובות.
 - כניסה עם Google לא מופעלת עדיין בפרויקט Supabase (רק email). האפליקציה עובדת במכשיר ומציגה הודעה. להפעלה: Authentication > Providers > Google, והוספת כתובת Vercel ל-Redirect URLs.

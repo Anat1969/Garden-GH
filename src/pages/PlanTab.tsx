@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { usePermitDoc } from '../lib/usePermit'
-import { PT_TO_M_AT_1, renderPage } from '../lib/pdf'
-import { uid, updateProject, updateVariant, upsertElement } from '../lib/store'
+import { PT_TO_M_AT_1 } from '../lib/pdf'
+import { renderRegion } from '../lib/permitReader'
+import { setPlanScale, uid, updateProject, updateVariant, upsertElement } from '../lib/store'
+import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, Opening, OpeningType, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { MATERIAL_COLOR, MATERIAL_TEXT } from '../lib/types'
 import { NO_BASIS, numberedNames } from '../lib/bom'
@@ -72,12 +74,16 @@ export default function PlanTab() {
   const drag = useRef<{ sx: number; sy: number; v: View; moved: boolean } | null>(null)
 
   const page = permit?.pages.find((p) => p.index === permit.planPage)
-  const pageW = page ? page.widthPt * displayMpp : 40
-  const pageH = page ? page.heightPt * displayMpp : 30
+  // אזור העבודה: השרטוט שנבחר בגיליון, או העמוד כולו
+  const region = page ? permit?.region ?? { x: 0, y: 0, w: page.widthPt, h: page.heightPt } : null
+  const regX = region ? region.x * displayMpp : 0
+  const regY = region ? region.y * displayMpp : 0
+  const pageW = region ? region.w * displayMpp : 40
+  const pageH = region ? region.h * displayMpp : 30
   const showBg = Boolean(permit && page && !manualOnly)
 
-  const [view, setView] = useState<View>({ x: 0, y: 0, w: pageW, h: pageH })
-  const fitKey = `${pageW.toFixed(2)}:${pageH.toFixed(2)}`
+  const [view, setView] = useState<View>({ x: regX, y: regY, w: pageW, h: pageH })
+  const fitKey = `${regX.toFixed(2)}:${regY.toFixed(2)}:${pageW.toFixed(2)}:${pageH.toFixed(2)}`
   const fit = () => {
     const els = variant.elements
     if (els.length && hasBasis) {
@@ -94,20 +100,21 @@ export default function PlanTab() {
         return
       }
     }
-    setView({ x: 0, y: 0, w: pageW, h: pageH })
+    setView({ x: regX, y: regY, w: pageW, h: pageH })
   }
   useEffect(fit, [fitKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!doc || !permit || manualOnly) return
     let alive = true
-    renderPage(doc, permit.planPage, 2400)
-      .then((u) => alive && setBg(u))
+    if (!region) return
+    renderRegion(doc, permit.planPage, region, 2600)
+      .then(({ canvas }) => alive && setBg(canvas.toDataURL('image/jpeg', 0.85)))
       .catch(() => undefined)
     return () => {
       alive = false
     }
-  }, [doc, permit?.planPage, manualOnly])
+  }, [doc, permit?.planPage, manualOnly, region?.x, region?.y, region?.w, region?.h])
 
   const setTool = (t: Tool) => {
     const p = new URLSearchParams(params)
@@ -340,6 +347,10 @@ export default function PlanTab() {
     )
   }
 
+  const calibDims = (permit?.dims ?? [])
+    .filter((d) => d.page === permit?.planPage && d.kind === 'length' && d.line && (d.status === 'confirmed' || d.source === 'text-layer'))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
   const pendingCount = variant.elements.filter((e) => !e.approved && (e.kind === 'wall' || e.kind === 'opening')).length
   const strokeK = view.w / 900
 
@@ -381,8 +392,8 @@ export default function PlanTab() {
           aria-label="קנבס תוכנית"
           style={{ cursor: tool === 'select' ? 'grab' : 'crosshair' }}
         >
-          {showBg && bg && <image href={bg} x={0} y={0} width={pageW} height={pageH} opacity={0.55} preserveAspectRatio="none" />}
-          {showBg && <rect x={0} y={0} width={pageW} height={pageH} fill="none" stroke="#c2c8c4" strokeWidth={strokeK} />}
+          {showBg && bg && <image href={bg} x={regX} y={regY} width={pageW} height={pageH} opacity={0.55} preserveAspectRatio="none" />}
+          {showBg && <rect x={regX} y={regY} width={pageW} height={pageH} fill="none" stroke="#c2c8c4" strokeWidth={strokeK} />}
           {hasBasis &&
             variant.elements.map((e) => {
               const sel = e.id === selId
@@ -392,6 +403,10 @@ export default function PlanTab() {
                 drag.current = null
                 select(e.id)
               }
+              if (e.kind === 'surface' && e.poly)
+                return (
+                  <polygon key={e.id} points={e.poly.map((v) => `${v.x},${v.y}`).join(' ')} fill={MATERIAL_COLOR[e.material]} fillOpacity={0.55} stroke={sel ? '#1d2120' : '#6d6a60'} strokeWidth={strokeK * (sel ? 3 : 1)} onPointerDown={onClick} style={{ cursor: 'pointer' }} />
+                )
               if (e.kind === 'surface')
                 return (
                   <rect key={e.id} x={e.x} y={e.y} width={e.w} height={e.d} fill={MATERIAL_COLOR[e.material]} fillOpacity={0.6} stroke={sel ? '#1d2120' : '#6d6a60'} strokeWidth={strokeK * (sel ? 3 : 1)} onPointerDown={onClick} style={{ cursor: 'pointer' }} />
@@ -457,6 +472,28 @@ export default function PlanTab() {
               </button>
             </div>
             {hasBasis && <div className="muted" style={{ fontSize: 13, marginTop: 8 }}>כיול חוזר משנה את קנה המידה של כל האלמנטים בהתאם.</div>}
+            {calibDims.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+                  או כיול לפי מידה כתובה בהיתר (מאושרת):
+                </div>
+                <div className="row" style={{ gap: 6 }}>
+                  {calibDims.map((d) => (
+                    <button
+                      key={d.id}
+                      className="btn small"
+                      onClick={() => {
+                        setPlanScale(project.id, { den: null, metersPerPt: d.value / segLen(d.line!), source: 'calibrated' })
+                        toast(`כויל לפי המידה ${d.raw}`)
+                        setTool('select')
+                      }}
+                    >
+                      {dimLabelText(d)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

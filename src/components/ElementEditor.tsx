@@ -2,6 +2,8 @@ import type { Element, Label, Project, Wall } from '../lib/types'
 import { LABEL_TEXT, MATERIAL_TEXT, KIND_TEXT } from '../lib/types'
 import { removeElement, upsertElement } from '../lib/store'
 import { NumField, Num, Tag } from './ui'
+import { dimLabelText, dimsForElement } from '../lib/dims'
+import { surfaceArea } from '../lib/bom'
 
 const len = (w: { x1: number; y1: number; x2: number; y2: number }) => Math.hypot(w.x2 - w.x1, w.y2 - w.y1)
 
@@ -13,7 +15,7 @@ function setLength<T extends { x1: number; y1: number; x2: number; y2: number }>
 
 export function approvedLabel(project: Project): Label {
   const src = project.permit?.scale.source
-  return src === 'text' ? 'measured' : src === 'calibrated' ? 'estimated' : 'assumed'
+  return src === 'text' || src === 'dimensions' ? 'measured' : src === 'calibrated' ? 'estimated' : 'assumed'
 }
 
 export function ElementEditor({ project, el, elements, name, onClose }: { project: Project; el: Element; elements: Element[]; name: string; onClose?: () => void }) {
@@ -80,8 +82,8 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
                 ))}
               </select>
             </label>
-            <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />
-            <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />
+            {!el.poly && <NumField label="רוחב (מ')" value={el.w} onChange={(v) => v > 0 && save({ w: v })} />}
+            {!el.poly && <NumField label="עומק (מ')" value={el.d} onChange={(v) => v > 0 && save({ d: v })} />}
             <NumField label="מפלס (מ')" value={el.level} onChange={(v) => save({ level: v })} />
           </>
         )}
@@ -110,11 +112,14 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
 
       {el.kind === 'surface' && (
         <div style={{ marginTop: 10 }}>
-          שטח: <Num value={el.w * el.d} unit='מ"ר' label={el.label} />
+          שטח: <Num value={surfaceArea(el)} unit='מ"ר' label={el.label} />
+          {el.poly && <span className="muted" style={{ fontSize: 13 }}> · מצולע מההיתר ({el.poly.length} קודקודים)</span>}
         </div>
       )}
       {el.kind === 'fence' && el.boundary && <div className="notice" style={{ marginTop: 10 }}>גבול מגרש בהיתר: לאימות במדידה.</div>}
       {el.kind === 'wall' && el.scope === 'garden' && el.height > 1 && <div className="notice pro" style={{ marginTop: 10 }}>קיר מעל מטר או קיר תומך: דורש מהנדס מוסמך.</div>}
+
+      <DimMatch project={project} el={el} elements={elements} />
 
       <div className="row" style={{ marginTop: 14 }}>
         {!el.approved && (
@@ -147,3 +152,32 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
 }
 
 const round = (v: number) => Math.round(v * 100) / 100
+
+// מידה כתובה מההיתר שמתאימה לאלמנט: לחיצה מחילה אותה כאורך או כרוחב
+function DimMatch({ project, el, elements }: { project: Project; el: Element; elements: Element[] }) {
+  const matches = dimsForElement(project, el, elements)
+  if (!matches.length) return null
+  const apply = (value: number, raw: string, measured: boolean) => {
+    const src = `מידה ${raw} מההיתר`
+    const label: Label = measured ? 'measured' : 'estimated'
+    if (el.kind === 'wall' || el.kind === 'fence') upsertElement(project.id, { ...setLength(el, value), label, source: src } as Element)
+    else if (el.kind === 'opening') upsertElement(project.id, { ...el, width: value, label, source: src })
+  }
+  return (
+    <div style={{ marginTop: 12 }} data-testid="dim-match">
+      <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+        מידות כתובות בהיתר, קרובות לאלמנט:
+      </div>
+      <div className="row" style={{ gap: 6 }}>
+        {matches.map(({ d }) => {
+          const measured = d.source === 'text-layer' || d.status === 'confirmed'
+          return (
+            <button key={d.id} className="btn small" onClick={() => apply(d.value, d.raw, measured)} title={measured ? 'מדוד מהיתר' : 'מוערך, ממתין לאישור במסך המידות'}>
+              {dimLabelText(d)}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { Element, PriceItem, Project, Requirements, Variant } from './types'
+import type { Element, PriceItem, Project, Requirements, ScaleInfo, Variant } from './types'
 import { getClient } from './supabase'
 import { deletePdf } from './idb'
 
@@ -150,6 +150,33 @@ export function removeElement(projectId: string, id: string) {
     // מחיקת קיר מוחקת גם את הפתחים שמקושרים אליו
     elements: v.elements.filter((e) => e.id !== id && !(e.kind === 'opening' && e.wallId === id)),
   }))
+}
+
+export function scaleElement(e: Element, k: number): Element {
+  switch (e.kind) {
+    case 'wall':
+      return { ...e, x1: e.x1 * k, y1: e.y1 * k, x2: e.x2 * k, y2: e.y2 * k, thickness: e.thickness * k }
+    case 'fence':
+      return { ...e, x1: e.x1 * k, y1: e.y1 * k, x2: e.x2 * k, y2: e.y2 * k }
+    case 'surface':
+      return { ...e, x: e.x * k, y: e.y * k, w: e.w * k, d: e.d * k }
+    case 'opening':
+      return { ...e, offset: e.offset * k, width: e.width * k }
+  }
+}
+
+// החלפת קנה מידה של עמוד העבודה. אלמנטים קיימים נמתחים כדי להישאר במקומם על הגיליון.
+export function setPlanScale(projectId: string, scale: ScaleInfo) {
+  updateProject(projectId, (p) => {
+    if (!p.permit) return p
+    const old = p.permit.scale.metersPerPt
+    const k = old && scale.metersPerPt ? scale.metersPerPt / old : 1
+    return {
+      ...p,
+      permit: { ...p.permit, scale },
+      variants: k === 1 ? p.variants : p.variants.map((v) => ({ ...v, elements: v.elements.map((e) => scaleElement(e, k)) })),
+    }
+  })
 }
 
 export async function deleteProject(id: string) {

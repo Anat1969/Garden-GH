@@ -1,5 +1,6 @@
 import type { Element, Label, PriceItem, Project, Unit, Variant } from './types'
 import { MATERIAL_TEXT } from './types'
+import { polyArea } from './geom'
 
 export const DISCLAIMER = 'הערכה בלבד עד לאישור מול מחירון מעודכן וספק.'
 export const NO_BASIS = 'אין בסיס למספרים'
@@ -95,7 +96,7 @@ export function numberedNames(elements: Element[]): Map<string, string> {
 
 function quantities(e: Element): { category: Category; qty: number; warning?: string }[] {
   if (e.kind === 'surface') {
-    const area = e.w * e.d
+    const area = surfaceArea(e)
     switch (e.material) {
       case 'paving':
         return [
@@ -224,3 +225,5 @@ export const PHASES: Phase[] = [
 
 export const fmtMoney = (n: number) => '₪' + Math.round(n).toLocaleString('he-IL')
 export const fmtNum = (n: number, d = 2) => n.toLocaleString('he-IL', { maximumFractionDigits: d, minimumFractionDigits: 0 })
+
+export const surfaceArea = (e: { poly?: { x: number; y: number }[]; w: number; d: number }) => (e.poly && e.poly.length >= 3 ? Math.abs(polyArea(e.poly)) : e.w * e.d)
