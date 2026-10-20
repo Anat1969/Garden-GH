@@ -103,7 +103,7 @@ test('עורך: הצמדה ואיחוד חומר, מחיקה וביטול, מי�
 
   // מדריך גינות מתפריט המערכת
   await page.getByRole('button', { name: 'תפריט המערכת' }).click()
-  await page.getByRole('link', { name: 'מדריך גינות' }).click()
+  await page.getByRole('link', { name: 'מדריך גינות' }).first().click()
   await expect(page.getByRole('heading', { name: 'מדריך גינות' })).toBeVisible()
   await page.getByRole('button', { name: 'עקרונות, צמחים ופרומפט' }).first().click()
   await expect(page.getByTestId('prompt-box').first()).toContainText('--no text, words, writing, frame divisions')

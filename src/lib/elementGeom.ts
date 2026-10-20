@@ -287,16 +287,21 @@ export function surfaceWithEdge(s: Surface, i: number, L: number): Surface {
 
 // ---------- שכפול וסיבוב ----------
 
-export function rotateElement(e: Element, deg: number): Element {
-  const c = (() => {
-    const b = boundsOf([e])
-    return b ? { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 } : { x: 0, y: 0 }
-  })()
+// סיבוב סביב מרכז האלמנט, או סביב מרכז משותף (בחירה מרובה)
+export function rotateElement(e: Element, deg: number, center?: Pt): Element {
+  const c =
+    center ??
+    (() => {
+      const b = boundsOf([e])
+      return b ? { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 } : { x: 0, y: 0 }
+    })()
   const r = (deg * Math.PI) / 180
   const rot = (p: Pt) => ({ x: Math.round((c.x + (p.x - c.x) * Math.cos(r) - (p.y - c.y) * Math.sin(r)) * 100) / 100, y: Math.round((c.y + (p.x - c.x) * Math.sin(r) + (p.y - c.y) * Math.cos(r)) * 100) / 100 })
   switch (e.kind) {
-    case 'object':
-      return { ...e, rot: (((e.rot + deg) % 360) + 360) % 360 }
+    case 'object': {
+      const at = center ? rot({ x: e.x, y: e.y }) : { x: e.x, y: e.y }
+      return { ...e, x: at.x, y: at.y, rot: (((e.rot + deg) % 360) + 360) % 360 }
+    }
     case 'surface':
       return withPoly(e, surfacePoly(e).map(rot))
     case 'line':
