@@ -127,6 +127,7 @@ test('סריקה: קריאה חכמה (מדומה), אישור וקביעת קנ
   await page.getByRole('link', { name: 'סקירה' }).click()
   await expect(page.getByText('מהמידות')).toBeVisible()
   await page.getByRole('link', { name: 'תוכנית ועריכה' }).click()
+  await page.getByRole('tab', { name: 'מבנה הבית' }).click()
   await expect(page.getByRole('button', { name: 'קיר בית', exact: true })).toBeEnabled()
   expect(errors).toEqual([])
 })

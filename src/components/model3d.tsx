@@ -2,8 +2,9 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { Building, Project, Pt, Surface } from '../lib/types'
-import { MATERIAL_COLOR } from '../lib/types'
+import { MATERIALS } from '../lib/garden'
 import { bbox, simplify } from '../lib/geom'
+import { useSurfaceTexture } from './garden3d'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -40,10 +41,9 @@ export function Label3D({ text, position, size = 0.32, color = '#1d2120', bg = '
 
 // ---------- משטח מצולע ----------
 
-const SURFACE_H: Record<Surface['material'], number> = { paving: 0.06, lawn: 0.04, bed: 0.2, deck: 0.15, gravel: 0.05 }
-
 export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
-  const h = SURFACE_H[s.material]
+  const h = MATERIALS[s.material].height
+  const tex = useSurfaceTexture(s.material, s.color, null)
   const geom = useMemo(() => {
     const shape = new THREE.Shape(s.poly!.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false })
@@ -62,7 +62,7 @@ export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: b
         onSelect(s.id)
       }}
     >
-      <meshStandardMaterial color={selected ? '#2f5d4a' : MATERIAL_COLOR[s.material]} roughness={0.95} />
+      {selected ? <meshStandardMaterial color="#2f5d4a" roughness={0.95} /> : <meshStandardMaterial map={tex} roughness={s.material === 'water' ? 0.15 : 0.95} />}
     </mesh>
   )
 }

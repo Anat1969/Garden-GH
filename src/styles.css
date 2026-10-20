@@ -182,6 +182,7 @@ table.t tfoot td { background: var(--paper-2); font-weight: 600; }
 .canvas-box svg { display: block; width: 100%; height: min(70vh, 720px); touch-action: none; background: repeating-linear-gradient(0deg, transparent 0 23px, #f1f3f2 23px 24px), repeating-linear-gradient(90deg, transparent 0 23px, #f1f3f2 23px 24px); }
 .toolbar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
 .toolbar > * { flex: 0 0 auto; }
+.toolbar > .hint { flex: 1 1 220px; min-width: 0; }
 .side { position: sticky; top: calc(var(--bar-h) + 16px); display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .el-list { max-height: 320px; overflow: auto; display: grid; gap: 4px; grid-auto-rows: max-content; }
 .el-item { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 9px; border: 1px solid transparent; cursor: pointer; background: #fff; text-align: start; width: 100%; font-size: 14px; }
@@ -214,6 +215,31 @@ table.t tfoot td { background: var(--paper-2); font-weight: 600; }
 .bar-track { height: 8px; background: #eceeed; border-radius: 999px; overflow: hidden; position: relative; }
 .bar-fill { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, var(--accent-2), var(--accent)); border-radius: 999px; }
 
+
+/* ספריית הגינה: קבוצות, אריחי סמלים, חומרים וצבעים */
+.palette { border-bottom: 1px solid var(--line); background: var(--paper-2); padding: 8px; display: grid; gap: 8px; min-width: 0; }
+.palette-groups { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--paper); color: var(--ink-2); cursor: pointer; transition: background .15s, border-color .15s; }
+.chip:hover { border-color: var(--accent-2); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.palette-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.tile { font: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 68px; padding: 6px 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-2); cursor: pointer; transition: border-color .15s, background .15s, transform .1s; }
+.tile span { font-size: 12px; line-height: 1.2; text-align: center; }
+.tile:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent); }
+.tile:active:not(:disabled) { transform: scale(0.97); }
+.tile.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tile:disabled { opacity: .45; cursor: not-allowed; }
+.palette-opts { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-top: 6px; border-top: 1px dashed var(--line); }
+.opt-k { font-size: 12px; color: var(--muted); }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+.swatch-btn { font: inherit; display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; font-size: 12px; color: var(--ink-2); }
+.swatch-btn i { width: 26px; height: 26px; border-radius: 6px; background-size: cover; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); flex: 0 0 auto; }
+.swatch-btn.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+.color-field { display: inline-flex; align-items: center; gap: 6px; }
+input[type="color"] { width: 34px; height: 28px; padding: 0; border: 1px solid var(--line-2); border-radius: 6px; background: var(--paper); cursor: pointer; }
+.dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--paper); box-shadow: 0 0 0 1px var(--line-2); cursor: pointer; padding: 0; }
+.dot.on { box-shadow: 0 0 0 2px var(--accent); }
+
 @media (max-width: 900px) {
   .hero { grid-template-columns: minmax(0, 1fr); }
   .hero-visual { max-width: 520px; width: 100%; margin: 0 auto; }
@@ -222,6 +248,8 @@ table.t tfoot td { background: var(--paper-2); font-weight: 600; }
   .canvas-box svg { height: 58vh; }
 }
 @media (max-width: 560px) {
+  .palette-tiles { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); }
+  .tile { min-height: 60px; }
   .brand-name { font-size: 19px; }
   .brand-logo { height: 32px; }
   .topbar { gap: 8px; }

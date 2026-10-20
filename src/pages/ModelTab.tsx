@@ -5,8 +5,12 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import type { Element, Fence, Opening, Project, Surface, Wall } from '../lib/types'
 import { MATERIAL_COLOR, MATERIAL_TEXT } from '../lib/types'
+import { LINES, MATERIALS, OBJECTS } from '../lib/garden'
+import { boundsOf } from '../lib/elementGeom'
+import { textureUrl } from '../lib/textures'
+import { GardenLineMesh, GardenObjectMesh, SketchMesh, useSurfaceTexture } from '../components/garden3d'
 import { ElementEditor } from '../components/ElementEditor'
-import { NO_BASIS, hasBasis, numberedNames, surfaceArea, fmtNum } from '../lib/bom'
+import { NO_BASIS, hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
 import { BuildingMass, Label3D, NorthArrow, PolySurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { LABEL_TEXT } from '../lib/types'
@@ -97,14 +101,14 @@ function WallMesh({ w, openings, selected, onSelect }: { w: Wall; openings: Open
   )
 }
 
-const SURFACE_H: Record<Surface['material'], number> = { paving: 0.06, lawn: 0.04, bed: 0.2, deck: 0.15, gravel: 0.05 }
-
 function SurfaceMesh({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
-  const h = SURFACE_H[s.material]
+  const h = MATERIALS[s.material].height
+  const tile = MATERIALS[s.material].tile
+  const tex = useSurfaceTexture(s.material, s.color, [s.w / tile, s.d / tile])
   return (
     <mesh position={[s.x + s.w / 2, s.level + h / 2, s.y + s.d / 2]} receiveShadow castShadow onClick={pick(s.id, onSelect)}>
       <boxGeometry args={[s.w, h, s.d]} />
-      <meshStandardMaterial color={selected ? '#2f5d4a' : MATERIAL_COLOR[s.material]} roughness={0.95} />
+      {selected ? <meshStandardMaterial color="#2f5d4a" roughness={0.95} /> : <meshStandardMaterial map={tex} roughness={s.material === 'water' ? 0.15 : 0.95} />}
     </mesh>
   )
 }
@@ -124,15 +128,11 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
 
 function Scene({ project, elements, selected, onSelect, showDims }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean }) {
   const bounds = useMemo(() => {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, minL = 0
-    for (const e of elements) {
-      const pts = e.kind === 'surface' ? (e.poly ?? [{ x: e.x, y: e.y }, { x: e.x + e.w, y: e.y + e.d }]).map((v) => [v.x, v.y]) : e.kind === 'opening' ? [] : [[e.x1, e.y1], [e.x2, e.y2]]
-      for (const [x, y] of pts) {
-        minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
-      }
-      if (e.kind === 'surface') minL = Math.min(minL, e.level)
-    }
-    if (!Number.isFinite(minX)) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0 }
+    let minL = 0
+    for (const e of elements) if (e.kind === 'surface' || e.kind === 'object' || e.kind === 'line') minL = Math.min(minL, e.level)
+    const b = boundsOf(elements)
+    if (!b) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0 }
+    const { minX, minY, maxX, maxY } = b
     return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL }
   }, [elements])
   const openings = elements.filter((e): e is Opening => e.kind === 'opening')
@@ -158,6 +158,12 @@ function Scene({ project, elements, selected, onSelect, showDims }: { project: P
           e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'fence' ? (
           <FenceMesh key={e.id} f={e} selected={selected === e.id} onSelect={onSelect} />
+        ) : e.kind === 'object' ? (
+          <GardenObjectMesh key={e.id} o={e} selected={selected === e.id} onSelect={onSelect} />
+        ) : e.kind === 'line' ? (
+          <GardenLineMesh key={e.id} l={e} selected={selected === e.id} onSelect={onSelect} />
+        ) : e.kind === 'sketch' ? (
+          <SketchMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : null,
       )}
       {project.building && footprints.length > 0 && <BuildingMass footprints={footprints} b={project.building} />}
@@ -190,6 +196,16 @@ function DimLabels({ elements, k }: { elements: Element[]; k: number }) {
         if (e.kind === 'surface') {
           const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
           return <Label3D key={e.id} text={`${fmtNum(surfaceArea(e), 1)} מ"ר · ${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)} · ${LABEL_TEXT[e.label]}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
+        }
+        if (e.kind === 'object') {
+          if (Math.max(e.w, e.d) < 1.5) return null
+          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w, 1)}×${fmtNum(e.d, 1)} · ${LABEL_TEXT[e.label]}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
+        }
+        if (e.kind === 'line') {
+          const L = polyLength(e.pts)
+          if (L < 2) return null
+          const m = e.pts[Math.floor(e.pts.length / 2)]
+          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L, 1)} מ' · ${LABEL_TEXT[e.label]}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
         }
         return null
       })}
@@ -268,9 +284,9 @@ export default function ModelTab() {
             <i style={{ background: '#f1d9a0' }} />
             לא אושר
           </span>
-          {(Object.keys(MATERIAL_TEXT) as (keyof typeof MATERIAL_TEXT)[]).map((m) => (
+          {(Object.keys(MATERIAL_TEXT) as (keyof typeof MATERIAL_TEXT)[]).filter((m) => variant.elements.some((e) => e.kind === 'surface' && e.material === m)).map((m) => (
             <span key={m} className="swatch">
-              <i style={{ background: MATERIAL_COLOR[m] }} />
+              <i style={{ background: MATERIAL_COLOR[m], backgroundImage: `url(${textureUrl(m, undefined, 64)})`, backgroundSize: 'cover' }} />
               {MATERIAL_TEXT[m]}
             </span>
           ))}

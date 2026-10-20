@@ -1,3 +1,7 @@
+import type { LineType, ObjectType, SurfaceMaterial } from './garden'
+export type { LineType, ObjectType, SurfaceMaterial } from './garden'
+export { MATERIAL_COLOR, MATERIAL_TEXT } from './garden'
+
 // מודל הנתונים של Garden-GH. כל מידה במטרים, מערכת צירים של התוכנית (x ימינה, y למטה).
 
 export type Label = 'measured' | 'estimated' | 'assumed'
@@ -197,24 +201,6 @@ export interface Opening extends Base {
   sill: number
 }
 
-export type SurfaceMaterial = 'paving' | 'lawn' | 'bed' | 'deck' | 'gravel'
-
-export const MATERIAL_TEXT: Record<SurfaceMaterial, string> = {
-  paving: 'ריצוף',
-  lawn: 'דשא',
-  bed: 'ערוגת שתילה',
-  deck: 'דק עץ',
-  gravel: 'חצץ',
-}
-
-export const MATERIAL_COLOR: Record<SurfaceMaterial, string> = {
-  paving: '#bdb6a8',
-  lawn: '#8fbf86',
-  bed: '#9b7653',
-  deck: '#b88a55',
-  gravel: '#d9d4c7',
-}
-
 export interface Surface extends Base {
   kind: 'surface'
   material: SurfaceMaterial
@@ -224,6 +210,7 @@ export interface Surface extends Base {
   w: number
   d: number
   level: number
+  color?: string // צבע שגובר על צבע החומר
 }
 
 export interface Fence extends Base {
@@ -236,13 +223,50 @@ export interface Fence extends Base {
   boundary: boolean
 }
 
-export type Element = Wall | Opening | Surface | Fence
+// פריט נקודתי מהספרייה: עץ, ספסל, פרגולה, פנס. x,y הם המרכז.
+export interface GardenObject extends Base {
+  kind: 'object'
+  type: ObjectType
+  x: number
+  y: number
+  w: number
+  d: number
+  h: number
+  rot: number // מעלות
+  level: number
+  color?: string
+}
+
+// אלמנט קווי: גדר חיה, אבן שפה, שביל, קו השקיה
+export interface GardenLine extends Base {
+  kind: 'line'
+  type: LineType
+  pts: Pt[]
+  width: number
+  height: number
+  level: number
+  color?: string
+}
+
+// שרטוט חופשי לסקיצה: לא נכנס לכתב הכמויות
+export interface Sketch extends Base {
+  kind: 'sketch'
+  pts: Pt[]
+  color: string
+  stroke: number // עובי במטרים
+  closed: boolean
+}
+
+export type Element = Wall | Opening | Surface | Fence | GardenObject | GardenLine | Sketch
 
 export const KIND_TEXT: Record<Element['kind'], string> = {
   wall: 'קיר',
   opening: 'פתח',
   surface: 'משטח',
   fence: 'גדר',
+  object: 'פריט',
+  line: 'אלמנט קווי',
+  sketch: 'שרטוט חופשי',
 }
 
 export interface Requirements {
