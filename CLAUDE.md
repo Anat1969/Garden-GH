@@ -27,7 +27,7 @@
 
 ## חיבורים
 - GitHub: ריפו Anat1969/garden-gh, ענף ברירת מחדל main.
-- Supabase: פרויקט cultura-GH, מזהה ktqmwpbzcnzkhjskqisy, אזור ap-northeast-2. הפרויקט ייעודי לאפליקציה, לכן אין קידומת לטבלאות. מפתחות נכנסים רק למשתני סביבה, לעולם לא לקוד או לריפו.
+- Supabase: פרויקט cultura-GH, מזהה ktqmwpbzcnzkhjskqisy, אזור ap-northeast-2. הפרויקט משותף לאפליקציות אחרות (יש בו כבר טבלת projects), לכן קידומת garden_ לכל הטבלאות ודלי garden-permits. מפתחות נכנסים רק למשתני סביבה, לעולם לא לקוד או לריפו.
 - Vercel: צוות team_UNONu5KtfgMgLtVno6fdCtrQ. ענף הייצור main. ssoProtection כבוי כדי שהאתר יהיה ציבורי.
 
 ## אבטחה בסופהבייס
@@ -39,9 +39,7 @@
 ## עבודה עם Git
 - כל שינוי בענף נפרד, ומיזוג ל-main דרך PR אחרי בדיקה ירוקה.
 - מיזוג ל-main מאושר מראש: אין צורך לשאול לפני מיזוג.
-- כל commit מסתיים בשורות:
-  Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01T9jkfiTKG2CJLNBro3nfGX
+- כל commit מסתיים בשורות Co-Authored-By ו-Claude-Session של הסשן שבו נעשה השינוי.
 - כל PR מסתיים בשורה: 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
 ## בדיקות לפני מיזוג
@@ -58,5 +56,12 @@
 ## מסירה
 כתובת סופית ושורה אחת על מה השתנה. לעדכן את CLAUDE.md בכל תיקון שענת מבקשת.
 
+## מבנה הקוד (שלב 1)
+- src/lib/pdf.ts: קריאת PDF, סיווג עמודים, זיהוי קנה מידה מטקסט (1:100), חילוץ קווים וקטוריים וזיהוי קירות (זוגות קווים מקבילים) ופתחים (רווחים בקיר, דלת לפי קשת).
+- src/lib/store.ts: מקומי-תחילה (localStorage, PDF ב-IndexedDB), סנכרון ל-garden_projects ו-garden_price_items כשמחוברים.
+- src/lib/bom.ts: כמויות, שיוך לסעיפי מחירון לפי קטגוריה, טווחי עלות ושלבים.
+- נתוני פרויקט נשמרים כ-jsonb בעמודה data (חלופות ואלמנטים בתוכו), לא בטבלאות נפרדות.
+- בדיקות: npm run build ואז npx playwright test (מוקים ל-Supabase, היתר לדוגמה ב-public/sample-permit.pdf).
+
 ## תיקונים שנאספו
-(ריק. לעדכן כאן כל תיקון חוזר.)
+- כניסה עם Google לא מופעלת עדיין בפרויקט Supabase (רק email). האפליקציה עובדת במכשיר ומציגה הודעה. להפעלה: Authentication > Providers > Google, והוספת כתובת Vercel ל-Redirect URLs.

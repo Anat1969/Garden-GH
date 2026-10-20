@@ -1,0 +1,33 @@
+{
+  "name": "garden-gh",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4173",
+    "sample": "node scripts/make-sample-permit.mjs",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "@supabase/supabase-js": "^2.46.1",
+    "framer-motion": "^11.11.17",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
