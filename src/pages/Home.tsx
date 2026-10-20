@@ -2,15 +2,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { createProject, useApp } from '../lib/store'
 import { Rise, Tag } from '../components/ui'
-
-const STEPS = [
-  { t: 'פרויקט והיתר', d: 'פותחים פרויקט ומעלים PDF של ההיתר. המערכת מזהה עמודים, סוג גיליון וקנה מידה.', to: 'permit' },
-  { t: 'קירות ופתחים', d: 'קירות ופתחים שזוהו מסומנים "מוערך". בודקים, מתקנים ומאשרים אחד אחד.', to: 'plan' },
-  { t: 'גינה ומפלסים', d: 'משרטטים משטחים, ערוגות, דשא, דק וגדרות על גבי התוכנית, במטרים.', to: 'plan' },
-  { t: 'מודל תלת-ממדי', d: 'הבית והגינה בנפח. לוחצים על אלמנט ועורכים אותו, אחד בכל פעם.', to: 'model' },
-  { t: 'כתב כמויות', d: 'כמויות לפי סעיפי מחירון, עם תווית לכל מספר וטווח עלות במקום מספר בודד.', to: 'bom' },
-  { t: 'שלבים וחלופות', d: 'סדר ביצוע, תקציב לכל שלב, וחלופה לאותו פרויקט עם דרישות שונות.', to: 'phases' },
-]
+import { RouteDemo } from '../components/RouteDemo'
+import { PlanThumb } from '../components/PlanThumb'
 
 function HeroVisual() {
   const plates = [
@@ -19,7 +12,7 @@ function HeroVisual() {
     { z: 2, fill: 'rgba(255,255,255,0.75)', kind: 'model' },
   ]
   return (
-    <div className="hero-visual" aria-hidden="true">
+    <motion.div className="hero-visual" aria-hidden="true" animate={{ y: [0, -8, 0] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.4 }}>
       {plates.map((p, i) => (
         <motion.div
           key={p.kind}
@@ -64,7 +57,7 @@ function HeroVisual() {
           </svg>
         </motion.div>
       ))}
-    </div>
+    </motion.div>
   )
 }
 
@@ -117,18 +110,9 @@ export default function Home() {
       <section className="section">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2 className="h-page">המסלול</h2>
-          <span className="eyebrow">שישה שלבים</span>
+          <span className="eyebrow">שישה שלבים, בהדגמה חיה</span>
         </div>
-        <div className="steps">
-          {STEPS.map((s, i) => (
-            <Rise key={s.t} delay={0.05 * i} className="card flat step">
-              <div className="h-section">{s.t}</div>
-              <p className="muted" style={{ margin: '6px 0 0', fontSize: 15 }}>
-                {s.d}
-              </p>
-            </Rise>
-          ))}
-        </div>
+        <RouteDemo />
       </section>
 
       <section className="section">
@@ -152,7 +136,8 @@ export default function Home() {
           <div className="grid-cards">
             {recent.map((p) => (
               <Link key={p.id} to={`/p/${p.id}`} className="card" style={{ textDecoration: 'none' }}>
-                <div className="eyebrow">{p.permit ? p.permit.fileName : 'ללא היתר'}</div>
+                <PlanThumb project={p} />
+                <div className="eyebrow" style={{ marginTop: 10 }}>{p.permit ? p.permit.fileName : 'ללא היתר'}</div>
                 <div className="h-section" style={{ marginTop: 6 }}>
                   {p.name}
                 </div>

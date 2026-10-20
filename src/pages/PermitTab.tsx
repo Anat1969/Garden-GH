@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { analyzePages, detectWalls, extractSegments, openPdf, pickPlanPage, PT_TO_M_AT_1, renderPage } from '../lib/pdf'
 import { savePdf } from '../lib/idb'
@@ -12,6 +12,9 @@ import { PAGE_KIND_TEXT } from '../lib/types'
 import { NO_BASIS } from '../lib/bom'
 import { ErrorState, Loading, Rise, Tag, toast } from '../components/ui'
 import { PermitReader } from '../components/PermitReader'
+import { ProjectDocs } from '../components/Documents'
+import { docFile } from '../lib/docs'
+import type { ProjectDoc } from '../lib/types'
 
 const VECTOR_SRC = 'זיהוי וקטורי'
 
@@ -110,6 +113,29 @@ export default function PermitTab() {
     }
     await ingest(await f.arrayBuffer(), f.name)
   }
+
+  // קריאת מסמך מצורף כהיתר: מכפתור ברשימת המסמכים, או אוטומטית אחרי יצירת פרויקט (?doc=)
+  const readDoc = async (d: ProjectDoc) => {
+    if (project.permit && !window.confirm(`להחליף את ההיתר הנוכחי ב-"${d.name}"?`)) return
+    const f = await docFile(d)
+    if (!f) {
+      setError('הקובץ לא נמצא במכשיר הזה')
+      return
+    }
+    await onFile(f)
+  }
+  const [params, setParams] = useSearchParams()
+  const autoDoc = params.get('doc')
+  const autoRan = useRef(false)
+  useEffect(() => {
+    if (!autoDoc || autoRan.current) return
+    autoRan.current = true
+    const p = new URLSearchParams(params)
+    p.delete('doc')
+    setParams(p, { replace: true })
+    const d = project.documents?.find((x) => x.id === autoDoc)
+    if (d && !project.permit) void readDoc(d)
+  }, [autoDoc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSample = async (kind: 'pdf' | 'scan' = 'pdf') => {
     try {
@@ -383,6 +409,16 @@ export default function PermitTab() {
           </div>
         </>
       )}
+
+      <div className="card">
+        <div className="h-section" style={{ marginBottom: 4 }}>
+          מסמכי הפרויקט
+        </div>
+        <p className="muted" style={{ margin: '0 0 12px', fontSize: 14 }}>
+          כל מסמך שקשור לפרויקט: היתר, מדידה, שרטוטים, תמונות, מפרטים. PDF ותמונה אפשר לקרוא כהיתר.
+        </p>
+        <ProjectDocs project={project} onReadAsPermit={(d) => void readDoc(d)} />
+      </div>
     </div>
   )
 }

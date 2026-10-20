@@ -6,7 +6,12 @@ test('הפרויקט של שני נוצר אוטומטית, עם מודל, מי�
   await page.route(/supabase\.co/, (r) => r.fulfill({ json: [] }))
   await page.setViewportSize({ width: 1366, height: 900 })
   await page.goto('/projects')
+  await expect(page.locator('.logo-btn img')).toBeVisible()
+  await page.getByRole('button', { name: 'תפריט המערכת' }).click()
   await expect(page.getByRole('img', { name: "אד' ענת שטיבלמן" })).toBeVisible()
+  await page.keyboard.press('Escape')
+  // כרטיס עם תוכנית הגינה
+  await expect(page.locator('.grid-cards .card').filter({ hasText: 'הבית של שני' }).locator('.plan-thumb svg')).toBeVisible()
   const card = page.locator('.grid-cards .card').filter({ hasText: 'הבית של שני' })
   await expect(card).toHaveCount(1)
   await card.getByRole('link', { name: 'פתיחה' }).click()
@@ -23,6 +28,7 @@ test('הפרויקט של שני נוצר אוטומטית, עם מודל, מי�
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
   await expect(page.getByText('דשא 1').first()).toBeVisible()
   // יצירה חוזרת מהכפתור
+  await page.getByRole('button', { name: 'תפריט המערכת' }).click()
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()
   await page.getByRole('button', { name: 'פרויקט לדוגמה: הבית של שני' }).click()
   await expect(page).toHaveURL(/\/model$/)

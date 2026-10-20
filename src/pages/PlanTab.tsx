@@ -8,7 +8,8 @@ import { setPlanScale, uid, updateProject, updateVariant, upsertElement } from '
 import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, GardenLine, GardenObject, Opening, OpeningType, Pt, Sketch, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
-import { NO_BASIS, numberedNames } from '../lib/bom'
+import { NO_BASIS, numberedNames, fmtNum, polyLength, surfaceArea } from '../lib/bom'
+import { LABEL_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
 import { boundsOf, moveElement, rdp, scaleElement } from '../lib/elementGeom'
 import { textureUrl } from '../lib/textures'
@@ -75,6 +76,7 @@ export default function PlanTab() {
   const [sketchColor, setSketchColor] = useState('#2f5d4a')
   const [penStroke, setPenStroke] = useState(0.08)
   const [group, setGroup] = useState<Group>(GROUP_OF[tool] ?? (tool === 'object' && item ? (OBJECTS[item as ObjectType]?.group ?? 'plants') : 'tools'))
+  const [showDims, setShowDims] = useState(false)
   const [moving, setMoving] = useState<{ el: Element; start: Pt; dx: number; dy: number } | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const drag = useRef<{ sx: number; sy: number; v: View; moved: boolean } | null>(null)
@@ -562,6 +564,9 @@ export default function PlanTab() {
             <button className="btn small" onClick={fit}>
               התאמה
             </button>
+            <button className={`btn small ${showDims ? 'active' : ''}`} onClick={() => setShowDims((v) => !v)} aria-pressed={showDims}>
+              הצגת מידות
+            </button>
           </div>
           {status === 'loading' && showBg && !bg && <div className="notice info" style={{ margin: 8 }}>טוען את גיליון התוכנית</div>}
           {status === 'missing' && showBg && <div className="notice" style={{ margin: 8 }}>קובץ ההיתר לא נמצא במכשיר. האלמנטים מוצגים בלי רקע.</div>}
@@ -611,6 +616,7 @@ export default function PlanTab() {
             ) : (
               <line x1={pending.x} y1={pending.y} x2={hover.x} y2={hover.y} stroke="#2f5d4a" strokeWidth={k * 3} strokeDasharray={`${k * 5} ${k * 3}`} />
             ))}
+            {hasBasis && showDims && <PlanDims elements={shown} k={k} />}
             {pending && <circle cx={pending.x} cy={pending.y} r={k * 5} fill="#2f5d4a" />}
             {polyPts.length > 0 && (
               <g>
@@ -831,4 +837,38 @@ function shadeDark(hex: string) {
   const n = parseInt(hex.slice(1), 16)
   const f = 0.55
   return `rgb(${Math.round(((n >> 16) & 255) * f)},${Math.round(((n >> 8) & 255) * f)},${Math.round((n & 255) * f)})`
+}
+
+// תוויות מידה על התוכנית: אורך קירות, גדרות ואלמנטים קוויים, שטח משטחים, מידות פריטים. מוצגות רק לפי בקשה
+function PlanDims({ elements, k }: { elements: Element[]; k: number }) {
+  const fs = k * 11
+  const label = (key: string, x: number, y: number, text: string, color = '#1d2120') => (
+    <g key={key} pointerEvents="none">
+      <text x={x} y={y} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={color} stroke="#fff" strokeWidth={k * 3.2} paintOrder="stroke" style={{ fontFamily: 'IBM Plex Sans Hebrew, sans-serif' }}>
+        {text}
+      </text>
+    </g>
+  )
+  return (
+    <g data-testid="plan-dims">
+      {elements.map((e) => {
+        const tag = LABEL_TEXT[e.label]
+        if (e.kind === 'wall' || e.kind === 'fence') {
+          const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
+          if (L < 0.5) return null
+          return label(e.id, (e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2 - fs, `${fmtNum(L)} מ' · ${tag}`)
+        }
+        if (e.kind === 'surface') {
+          const c = e.poly ? e.poly.reduce((a, p) => ({ x: a.x + p.x / e.poly!.length, y: a.y + p.y / e.poly!.length }), { x: 0, y: 0 }) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
+          return label(e.id, c.x, c.y, `${fmtNum(surfaceArea(e), 1)} מ"ר · ${tag}`, '#2f5d4a')
+        }
+        if (e.kind === 'line') {
+          const m = e.pts[Math.floor(e.pts.length / 2)]
+          return m ? label(e.id, m.x, m.y - fs, `${fmtNum(polyLength(e.pts), 1)} מ' · ${tag}`, '#2f5d4a') : null
+        }
+        if (e.kind === 'object') return label(e.id, e.x, e.y + e.d / 2 + fs, `${fmtNum(e.w, 1)}×${fmtNum(e.d, 1)} · ${tag}`, '#48546b')
+        return null
+      })}
+    </g>
+  )
 }
