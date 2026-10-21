@@ -6,8 +6,7 @@ import { MATERIALS } from '../lib/garden'
 import { bbox } from '../lib/geom'
 import { SurfMat, useSurfaceTexture } from './garden3d'
 import { useModelFinish } from '../lib/finish'
-import { PlasterMat, RealCrown, RealPalm, RealTrunk } from './realism3d'
-import { roofTilePBR } from '../lib/realism'
+import { RealCrown, RealPalm, RealTrunk } from './realism3d'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -70,6 +69,14 @@ export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: b
   )
 }
 
+// ---------- הבית: מסה אחידה ושקופה למחצה ----------
+
+export const HOUSE_COLOR = '#e6e3dc'
+export const HOUSE_OPACITY = 0.72
+export function HouseMat({ sel = false }: { sel?: boolean }) {
+  return <meshStandardMaterial color={sel ? '#2f5d4a' : HOUSE_COLOR} emissive={sel ? '#2f5d4a' : '#000000'} emissiveIntensity={sel ? 0.3 : 0} roughness={0.85} transparent opacity={sel ? 0.95 : HOUSE_OPACITY} side={THREE.DoubleSide} depthWrite />
+}
+
 // ---------- מסת הקומות העליונות והגג ----------
 
 export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Building }) {
@@ -88,8 +95,7 @@ export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Buildin
   )
 }
 
-function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
-  const real = useModelFinish() === 'detailed'
+function UpperBlock({ fp, z0, z1 }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
   const geom = useMemo(() => {
     const shape = new THREE.Shape(fp.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false })
@@ -99,7 +105,7 @@ function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: num
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} position={[0, z0, 0]} castShadow receiveShadow>
-      {real && !roof ? <PlasterMat L={1} H={1} /> : <meshStandardMaterial color={real && roof ? '#9b9890' : color} roughness={0.92} />}
+      <HouseMat />
     </mesh>
   )
 }
@@ -108,7 +114,7 @@ function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: num
 function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
   const geom = useMemo(() => {
     const bb = bbox(fp)
-    const o = 0.4 // בליטת גג
+    const o = 0 // בלי בליטות: מסה נקייה
     const x0 = bb.x - o
     const x1 = bb.x + bb.w + o
     const z0 = bb.y - o
@@ -142,15 +148,9 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
     return g
   }, [fp, eave, ridge])
   useEffect(() => () => geom.dispose(), [geom])
-  const real = useModelFinish() === 'detailed'
-  const tiles = real ? roofTilePBR() : null
   return (
-    <mesh geometry={geom} castShadow receiveShadow>
-      {tiles ? (
-        <meshStandardMaterial map={tiles.map} normalMap={tiles.normalMap} normalScale={new THREE.Vector2(1.6, 1.6)} roughnessMap={tiles.roughnessMap} side={THREE.DoubleSide} />
-      ) : (
-        <meshStandardMaterial color="#9a9d99" roughness={0.85} side={THREE.DoubleSide} />
-      )}
+    <mesh geometry={geom} castShadow>
+      <HouseMat />
     </mesh>
   )
 }

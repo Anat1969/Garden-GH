@@ -63,6 +63,10 @@ export function sheetCss(fontBase: string) {
 .plan-svg .pl-num { font-family: 'Roboto Mono', monospace; fill: #2b2b2b; }
 .plan-svg .pl-dim { fill: #5a5a5a; }
 .sh-iso img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sh-areas table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+.sh-areas td { padding: 1.2mm 0; border-bottom: 0.1mm solid #cfc8b8; }
+.sh-areas td.num { text-align: left; }
+.sh-areas tfoot td { font-weight: 700; border-top: 0.3mm solid #3a3a3a; border-bottom: none; }
 .sh-cap { font-size: 8.5pt; font-weight: 700; margin-bottom: 1.2mm; }
 .sh-details { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(4, auto); gap: 0 3mm; font-size: 7.5pt; line-height: 1.55; align-content: start; }
 .sh-details div { display: flex; justify-content: space-between; gap: 2mm; border-bottom: 0.1mm solid #cfc8b8; }
@@ -119,7 +123,13 @@ export function Sheet({ model, images, scale = 204 / PAGE.w }: { model: SheetMod
   const dno = colX(11, 2)
   const render = colX(1, 10)
   const chips = colX(11, 2)
-  const plansCols = model.plans.length > 1 ? [colX(1, 6), colX(7, 6)] : [colX(1, 12)]
+  const single = model.plans.length === 1
+  const plansCols = !single ? [colX(1, 6), colX(7, 6)] : [colX(1, 8)]
+  const areasBox = colX(9, 4)
+  // טבלת שטחים לתוכנית יחידה: קיבוץ לפי שם, מהגדול לקטן
+  const areaRows = single
+    ? [...model.plans[0].areas.reduce((m, a) => m.set(a.name, (m.get(a.name) ?? 0) + a.area), new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1])
+    : []
   const renderTop = 47
   const renderH = 126
   const callH = renderH
@@ -212,7 +222,7 @@ export function Sheet({ model, images, scale = 204 / PAGE.w }: { model: SheetMod
             const v = planViewBox(d, dd / 100)
             return (v.w * 1000) / dd <= c.width && (v.h * 1000) / dd <= availH
           }
-          const den = [100, 125, 150, 200, 250, 300, 400, 500, 750, 1000].find(fits) ?? 1000
+          const den = [100, 125, 150, 175, 200, 225, 250, 275, 300, 350, 400, 500, 750, 1000].find(fits) ?? 1000
           const w = (planViewBox(d, den / 100).w * 1000) / den
           return (
             <div key={i} className="sh-box" style={{ top: '177mm', left: `${c.left}mm`, width: `${c.width}mm`, height: '151mm' }}>
@@ -231,6 +241,30 @@ export function Sheet({ model, images, scale = 204 / PAGE.w }: { model: SheetMod
             </div>
           )
         })}
+        {single && (
+          <div className="sh-box sh-areas fit" style={{ top: '177mm', left: `${areasBox.left}mm`, width: `${areasBox.width}mm`, height: '151mm' }} data-testid="sheet-areas">
+            <div className="sh-plan-title">
+              <span>טבלת שטחים</span>
+              <span style={{ fontSize: '8.5pt', fontWeight: 400 }}>מ"ר</span>
+            </div>
+            <table>
+              <tbody>
+                {areaRows.map(([n, a]) => (
+                  <tr key={n}>
+                    <td>{n}</td>
+                    <td className="num">{a.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>סך הכל</td>
+                  <td className="num">{areaRows.reduce((s2, r) => s2 + r[1], 0).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
         <div className="sh-rule thin" style={{ top: '330mm', left: `${header.left}mm`, width: `${header.width}mm` }} />
 
         {/* הדמיה תלת-ממדית ברוחב מלא */}

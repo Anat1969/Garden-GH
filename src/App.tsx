@@ -73,7 +73,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/projects" element={<Projects />} />
-            <Route path="/p/:id/sheet" element={<SheetPage />} />
             <Route path="/sheet-render" element={<SheetRender />} />
             <Route path="/p/:id" element={<ProjectLayout />}>
               <Route index element={<Overview />} />
@@ -84,6 +83,7 @@ export default function App() {
               <Route path="model" element={<ModelTab />} />
               <Route path="bom" element={<BomTab />} />
               <Route path="phases" element={<PhasesTab />} />
+              <Route path="sheet" element={<SheetPage />} />
               <Route path="variants" element={<VariantsTab />} />
             </Route>
             <Route path="/prices" element={<Prices />} />

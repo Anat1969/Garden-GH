@@ -8,8 +8,8 @@ import { canRedo, canUndo, redo, removeElement, setPlanScale, uid, undo, updateP
 import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, GardenLine, GardenObject, Opening, OpeningType, Pt, Sketch, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
-import { NO_BASIS, numberedNames, fmtNum, polyLength, surfaceArea } from '../lib/bom'
-import { KIND_TEXT, LABEL_TEXT } from '../lib/types'
+import { NO_BASIS, numberedNames } from '../lib/bom'
+import { KIND_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
 import { boundsOf, elementPoints, handlePoints, setVertex, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
 import { IconBtn } from '../components/EditIcons'
@@ -19,7 +19,10 @@ import { textureUrl } from '../lib/textures'
 import { ElementEditor, approvedLabel } from '../components/ElementEditor'
 import { GardenPalette, type Group, type Tool } from '../components/GardenPalette'
 import { GardenIcon } from '../components/GardenIcons'
-import { Empty, Tag, toast } from '../components/ui'
+import { Empty, Rich, Tag, toast } from '../components/ui'
+import { CoachHalo, CoachPanel, PlanClimateBar, PlanClimateLegend, PlanHeatImage, useCoachClimate, usePlanClimate } from '../components/PlanClimate'
+import { computeClimate3, plannerInsights } from '../lib/climateScores'
+import { DIM_MODES, DimsBetween, DimsChains, DimsElements, MeasureDraw, type DimMode } from '../components/PlanMeasure'
 
 const patternId = (m: SurfaceMaterial, c?: string) => `tex-${m}-${(c ?? 'x').replace('#', '')}`
 const GROUP_OF: Partial<Record<Tool, Group>> = { wall: 'house', gwall: 'house', fence: 'house', opening: 'house', line: 'lines' }
@@ -80,6 +83,24 @@ export default function PlanTab() {
   const [penStroke, setPenStroke] = useState(0.08)
   const [group, setGroup] = useState<Group>(GROUP_OF[tool] ?? (tool === 'object' && item ? (OBJECTS[item as ObjectType]?.group ?? 'plants') : 'tools'))
   const [showDims, setShowDims] = useState(false)
+  // שיטת מדידה, נשמרת במכשיר
+  const [dimMode, setDimModeState] = useState<DimMode>(() => {
+    try {
+      return (localStorage.getItem('garden-gh:dim-mode') as DimMode) || 'elements'
+    } catch {
+      return 'elements'
+    }
+  })
+  const setDimMode = (m: DimMode) => {
+    setDimModeState(m)
+    setMeasurePts([])
+    try {
+      localStorage.setItem('garden-gh:dim-mode', m)
+    } catch {
+      /* בלי אחסון */
+    }
+  }
+  const [measurePts, setMeasurePts] = useState<Pt[]>([])
   const [snapOn, setSnapOn] = useState(true)
   const [finish, setFinish] = useFinish<PlanFinish>('plan', 'texture')
   // גרירת ידית: קודקוד משטח או קו, קצה קיר, או פינת שינוי גודל של פריט
@@ -402,6 +423,13 @@ export default function PlanTab() {
   }
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // מדידה חופשית: כל לחיצה מוסיפה נקודה (עם הצמדה לקודקודים)
+    if (showDims && dimMode === 'measure' && e.button === 0 && !spaceDown.current && tool === 'select') {
+      const w = toWorld(e.clientX, e.clientY)
+      const hit = snapOn ? snapTo(w, snapSet(variant.elements), view.w / 70) : null
+      setMeasurePts((ps) => [...ps, hit ? hit.p : w])
+      return
+    }
     // גלגלת (כפתור אמצעי) או רווח לחוץ: הזזת התצוגה, כמו בתוכנות שרטוט
     if (e.button === 1 || (e.button === 0 && spaceDown.current)) {
       e.preventDefault()
@@ -547,6 +575,7 @@ export default function PlanTab() {
       if (e.key === 'Escape') {
         resetDraft()
         setDimEdit(null)
+        setMeasurePts([])
       }
       if (e.key === 'Enter' && polyPts.length) finishPoly()
       if (e.key === ' ' && !['BUTTON', 'A'].includes((e.target as HTMLElement)?.tagName)) {
@@ -728,6 +757,17 @@ export default function PlanTab() {
     toast('כל הקירות והפתחים אושרו')
   }
 
+  // מפות אקלים בתוכנית, מדריך חם-קר לאלמנט הנבחר, ותובנות למתכנן
+  const planClimate = usePlanClimate(project, variant.elements)
+  const coachEl = selected && !isMulti && tool === 'select' ? selected : null
+  const coachC = useCoachClimate(project, variant.elements, coachEl)
+  const climateLayer = planClimate.state.st.layer
+  const insightsList = useMemo(() => {
+    if (climateLayer === 'none') return []
+    const c = computeClimate3(project, variant.elements)
+    return c ? plannerInsights(c) : []
+  }, [climateLayer, project, variant.elements])
+
   if (!permit && !manualOnly) {
     return (
       <div className="card">
@@ -866,6 +906,20 @@ export default function PlanTab() {
             </span>
             <IconBtn icon="snap" label="הצמדה" pressed={snapOn} onClick={() => setSnapOn((v) => !v)} />
             <IconBtn icon="dims" label="הצגת מידות" pressed={showDims} onClick={() => setShowDims((v) => !v)} />
+            {showDims && (
+              <span className="tool-group" role="radiogroup" aria-label="שיטת מדידה">
+                {DIM_MODES.map((m) => (
+                  <button key={m.id} type="button" role="radio" aria-checked={dimMode === m.id} className={`btn small ${dimMode === m.id ? 'active' : ''}`} title={m.d} onClick={() => setDimMode(m.id)}>
+                    {m.t}
+                  </button>
+                ))}
+              </span>
+            )}
+            {showDims && dimMode === 'measure' && measurePts.length > 0 && (
+              <button type="button" className="btn small" onClick={() => setMeasurePts([])}>
+                ניקוי מדידה
+              </button>
+            )}
             <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
               {PLAN_FINISH.map((f) => (
                 <button key={f.id} type="button" role="radio" aria-checked={finish === f.id} className={`btn small ${finish === f.id ? 'active' : ''}`} onClick={() => setFinish(f.id)} title={f.d}>
@@ -874,6 +928,7 @@ export default function PlanTab() {
               ))}
             </span>
           </div>
+          {hasBasis && <PlanClimateBar state={planClimate.state} />}
           {isMulti && hasBasis && tool === 'select' && (
             <div className="selbar" role="toolbar" aria-label="פעולות על הבחירה" data-testid="multi-bar">
               <b>נבחרו {selection.length} אלמנטים</b>
@@ -929,13 +984,17 @@ export default function PlanTab() {
             </defs>
             {showBg && bg && <image href={bg} x={regX} y={regY} width={pageW} height={pageH} opacity={0.55} preserveAspectRatio="none" />}
             {showBg && <rect x={regX} y={regY} width={pageW} height={pageH} fill="none" stroke="#c2c8c4" strokeWidth={k} />}
+            {hasBasis && planClimate.data.grid && planClimate.data.values && (
+              <PlanHeatImage g={planClimate.data.grid} values={planClimate.data.values} ramp={planClimate.data.ramp} max={planClimate.data.max} />
+            )}
             {hasBasis &&
               [...shown]
                 .sort((a, b) => order(a) - order(b))
                 .map((e) => {
                   const sel = selIds.has(e.id)
                   const onDown = (ev: React.PointerEvent) => {
-                    if (tool !== 'select' || ev.button !== 0 || spaceDown.current) return
+                    // במדידה חופשית הלחיצה עוברת לתוכנית ומוסיפה נקודה
+                    if (tool !== 'select' || ev.button !== 0 || spaceDown.current || (showDims && dimMode === 'measure')) return
                     ev.stopPropagation()
                     drag.current = null
                     // Shift או Ctrl: הוספה או הסרה מהבחירה
@@ -959,8 +1018,12 @@ export default function PlanTab() {
             ) : (
               <line x1={pending.x} y1={pending.y} x2={hover.x} y2={hover.y} stroke="#2f5d4a" strokeWidth={k * 3} strokeDasharray={`${k * 5} ${k * 3}`} />
             ))}
-            {hasBasis && showDims && <PlanDims elements={shown.filter((e) => e.id !== selId)} k={k} />}
+            {hasBasis && showDims && dimMode === 'elements' && <DimsElements elements={shown.filter((e) => e.id !== selId)} k={k} />}
+            {hasBasis && showDims && dimMode === 'chains' && <DimsChains elements={shown} k={k} />}
+            {hasBasis && showDims && dimMode === 'between' && selected && !isMulti && <DimsBetween el={shown.find((x) => x.id === selected.id) ?? selected} elements={shown} k={k} />}
+            {hasBasis && showDims && dimMode === 'measure' && <MeasureDraw pts={measurePts} hover={measurePts.length ? hover : null} k={k} />}
             {hasBasis && selected && !isMulti && <SelDims e={shown.find((x) => x.id === selected.id) ?? selected} k={k} onEdit={openDimEdit} />}
+            {hasBasis && coachEl && coachC && <CoachHalo c={coachC} el={shown.find((x) => x.id === coachEl.id) ?? coachEl} k={k} />}
             {hasBasis && selected && !isMulti && tool === 'select' && !moving &&
               handlePoints(shown.find((x) => x.id === selected.id) ?? selected).map((h, i) => (
                 <rect
@@ -1028,6 +1091,8 @@ export default function PlanTab() {
               </g>
             )}
           </svg>
+          {hasBasis && coachEl && coachC && <CoachPanel c={coachC} el={shown.find((x) => x.id === coachEl.id) ?? coachEl} name={names.get(coachEl.id) ?? ''} moving={Boolean(moving)} />}
+          {hasBasis && climateLayer !== 'none' && planClimate.data.values && <PlanClimateLegend ramp={planClimate.data.ramp} layer={climateLayer} />}
           {hover && hasBasis && (pending || polyPts.length > 0) && (
             <div className="mono" style={{ position: 'absolute', bottom: 8, insetInlineEnd: 8, background: 'rgba(255,255,255,.9)', padding: '2px 8px', borderRadius: 8, fontSize: 12 }}>
               {pending && tool === 'rect'
@@ -1078,6 +1143,21 @@ export default function PlanTab() {
         </div>
 
         <aside className="side">
+          {insightsList.length > 0 && (
+            <div className="card flat insights-card" data-testid="planner-insights">
+              <b>תובנות למתכנן</b>
+              <ol className="steps-list">
+                {insightsList.map((t) => (
+                  <li key={t}>
+                    <Rich text={t} />
+                  </li>
+                ))}
+              </ol>
+              <div className="muted" style={{ fontSize: 12 }}>
+                מוערך, לפי מסלול השמש, משטר הרוחות והמבנה. בוחרים אלמנט ישיבה, צל, עץ או דשא כדי לקבל הכוונה בחם וקר.
+              </div>
+            </div>
+          )}
           {!hasBasis && <div className="notice danger">{NO_BASIS}. מכיילים קנה מידה: שתי לחיצות על מידה ידועה בגיליון, ואז המרחק במטרים.</div>}
 
           {tool === 'calibrate' && (
@@ -1350,40 +1430,3 @@ function shadeDark(hex: string) {
 }
 
 // תוויות מידה על התוכנית: אורך קירות, גדרות ואלמנטים קוויים, שטח משטחים, מידות פריטים. מוצגות רק לפי בקשה
-function PlanDims({ elements, k }: { elements: Element[]; k: number }) {
-  const fs = k * 11
-  const label = (key: string, x: number, y: number, text: string, color = '#1d2120') => (
-    <g key={key} pointerEvents="none">
-      <text x={x} y={y} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={color} stroke="#fff" strokeWidth={k * 3.2} paintOrder="stroke" style={{ fontFamily: 'IBM Plex Sans Hebrew, sans-serif' }}>
-        {text}
-      </text>
-    </g>
-  )
-  return (
-    <g data-testid="plan-dims">
-      {elements.map((e) => {
-        const tag = LABEL_TEXT[e.label]
-        if (e.kind === 'wall' || e.kind === 'fence') {
-          const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          if (L < 0.5) return null
-          return label(e.id, (e.x1 + e.x2) / 2, (e.y1 + e.y2) / 2 - fs, `${fmtNum(L)}${e.kind === 'wall' ? ` × ${fmtNum(e.thickness)}` : ''} מ' · ${tag}`)
-        }
-        if (e.kind === 'surface') {
-          const c = e.poly ? e.poly.reduce((a, p) => ({ x: a.x + p.x / e.poly!.length, y: a.y + p.y / e.poly!.length }), { x: 0, y: 0 }) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          return (
-            <g key={e.id}>
-              {label(`${e.id}a`, c.x, c.y - fs * 0.6, `${fmtNum(surfaceArea(e))} מ"ר · ${tag}`, '#2f5d4a')}
-              {label(`${e.id}b`, c.x, c.y + fs * 0.7, `${fmtNum(e.w)} × ${fmtNum(e.d)} מ'`, '#48546b')}
-            </g>
-          )
-        }
-        if (e.kind === 'line') {
-          const m = e.pts[Math.floor(e.pts.length / 2)]
-          return m ? label(e.id, m.x, m.y - fs, `${fmtNum(polyLength(e.pts))} × ${fmtNum(e.width)} מ' · ${tag}`, '#2f5d4a') : null
-        }
-        if (e.kind === 'object') return label(e.id, e.x, e.y + e.d / 2 + fs, `${fmtNum(e.w)}×${fmtNum(e.d)} · ${tag}`, '#48546b')
-        return null
-      })}
-    </g>
-  )
-}

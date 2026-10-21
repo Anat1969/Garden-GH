@@ -7,6 +7,8 @@ import { surfaceArea } from '../bom'
 import { unitFootprints } from '../structureToElements'
 import type { CalloutIn, Chip, PlanDrawing, Scene3D, SheetModel, XY } from './types'
 
+import { haikuSuggestions, postSuggestions } from './suggest'
+
 export interface SheetOverrides {
   subtitle?: string
   studioName?: string
@@ -17,6 +19,9 @@ export interface SheetOverrides {
   planner?: string
   poem?: string
   post?: string
+  camAz?: number
+  camEl?: number
+  camZoom?: number
 }
 
 const EN: Record<SurfaceMaterial, string> = {
@@ -199,8 +204,9 @@ export function fromProject(p: Project, o: SheetOverrides = {}): SheetModel {
     scene,
     chips: allChips,
     callouts,
-    poem: o.poem || DEFAULT_POEM,
-    post: o.post || `${p.name}: ${surfaces.length} אזורי גינה על ${gardenArea.toFixed(2)} מ"ר סביב הבית. הדמיה ויזואלית לשלב התכנון.`,
+    poem: o.poem || haikuSuggestions(p)[0] || DEFAULT_POEM,
+    post: o.post || postSuggestions(p)[0],
+    camera: { az: o.camAz ?? 0, el: o.camEl ?? 20, zoom: o.camZoom ?? 1 },
     assumptions,
     checks: [],
   }

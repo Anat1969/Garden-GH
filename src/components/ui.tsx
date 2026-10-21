@@ -246,3 +246,9 @@ export function Modal({ title, children, onClose, actions }: { title: string; ch
     </div>
   )
 }
+
+// טקסט עם הדגשות: **מילה** הופכת למודגשת
+export function Rich({ text }: { text: string }) {
+  const parts = text.split(/\*\*(.+?)\*\*/g)
+  return <>{parts.map((p, i) => (i % 2 ? <b key={i}>{p}</b> : p))}</>
+}

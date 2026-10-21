@@ -10,13 +10,19 @@ test('גליון להדפסה: הדמיה, תוכנית, לוח חומרים, ע
   await page.setViewportSize({ width: 1366, height: 1000 })
   await page.goto('/projects')
   await page.locator('.grid-cards .card').filter({ hasText: 'הבית של שני' }).getByRole('link', { name: 'פתיחה' }).click()
-  await page.getByTestId('open-sheet').click()
+  await page.getByRole('link', { name: 'גליון להדפסה' }).click()
   await expect(page.getByTestId('sheet-page')).toBeVisible()
   await expect(page.locator('.sh-render img')).toBeVisible()
   await expect(page.locator('.plan-svg')).toHaveCount(1)
   await expect(page.locator('.sh-chip')).toHaveCount(5)
   await expect(page.getByTestId('sheet-checks')).toBeVisible()
 
+  // הצעות להייקו: מתחלפות, ועדיין ניתנות לעריכה
+  const before = await page.getByTestId('sheet-poem').inputValue()
+  expect(before.split('\n').length).toBe(3)
+  await page.getByRole('button', { name: 'הצעה אחרת להייקו' }).click()
+  await expect(page.getByTestId('sheet-poem')).not.toHaveValue(before)
+  await expect(page.getByTestId('sheet-areas')).toContainText('סך הכל')
   // עריכת ההייקו מופיעה בגיליון
   await page.getByLabel('הייקו, שלוש שורות').fill('שורה ראשונה\nשורה שנייה\nשורה שלישית')
   await expect(page.locator('.sh-haiku')).toContainText('שורה שנייה')

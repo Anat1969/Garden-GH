@@ -464,13 +464,22 @@ details.card > summary { cursor: pointer; }
 .zone-item.on { border-color: var(--accent); background: var(--accent-soft); }
 .zone-item i { width: 24px; height: 24px; border-radius: 6px; background-size: cover; flex: 0 0 auto; }
 .zone-item input { accent-color: var(--accent); }
-.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: stretch; grid-auto-flow: row dense; }
-/* כל הכרטיסים בשורה באותו גובה: התוכן למעלה, השורה התחתונה והכפתור מיושרים לתחתית */
-.guide-card:not(.open) { display: flex; flex-direction: column; }
-.guide-card:not(.open) > .btn { margin-top: auto !important; align-self: flex-start; }
-.guide-card:not(.open) > .style-meta { margin-top: auto; padding-top: 8px; }
-.guide-card:not(.open) > .style-meta + .btn { margin-top: 10px !important; }
-.guide-card .stored-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; margin-bottom: 8px; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); column-gap: 16px; row-gap: 0; align-items: stretch; }
+/* רשת משנה: כל שכבה בכרטיס (תמונה, כותרת, תקציר, מדדים, כפתור) באותו גובה בכל השורה, כך שהקווים רציפים ומקבילים */
+.guide-card { grid-row: span var(--rows, 6); display: grid; grid-template-rows: subgrid; row-gap: 8px; margin-bottom: 16px; align-content: start; }
+.guide-card.open { grid-column: 1 / -1; grid-row: auto; display: block; }
+.guide-card.open > * + * { margin-top: 8px; }
+.guide-card > * { margin: 0; min-width: 0; }
+.gc-media .stored-img + .approach-art { display: none; }
+.gc-media { display: grid; gap: 8px; align-content: end; }
+.guide-card .stored-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; }
+.gc-head { align-self: end; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.gc-tag, .gc-text { line-height: 1.6; }
+.gc-foot { align-self: end; border-top: 1px solid var(--line); padding-top: 10px; }
+.style-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; align-self: end; }
+.approach-art { color: var(--accent); display: flex; justify-content: flex-start; padding: 4px 0; }
+.guide-card .gc-open { grid-column: 1 / -1; }
+mark { background: #f5e3a3; color: inherit; border-radius: 3px; padding: 0 2px; }
 .guide-card.open { grid-column: 1 / -1; }
 ul.tight { margin: 6px 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 14px; }
 .rules { display: grid; gap: 8px; }
@@ -646,3 +655,33 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
   .sheet-stage .sheet-page { box-shadow: none !important; }
 }
 @media print { .sheet-layout { margin: 0 !important; } }
+
+/* אקלים בתוכנית ומדריך חם-קר */
+.plan-climate-bar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); background: #fbfbf8; }
+.coach { position: absolute; inset-inline-start: 10px; bottom: 10px; width: min(320px, calc(100% - 20px)); background: rgba(255,255,255,.95); border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow-2); z-index: 3; display: grid; gap: 6px; font-size: 13px; transition: border-color .25s; }
+.coach.ideal { box-shadow: 0 0 0 4px rgba(31,138,76,.18), var(--shadow-2); }
+.coach-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.coach-word { color: #fff; font-weight: 800; padding: 2px 10px; border-radius: 999px; font-size: 13px; transition: background .25s; white-space: nowrap; }
+.coach-meter { position: relative; height: 8px; border-radius: 6px; background: linear-gradient(to left, #3b6fb6, #8fb3d9, #f0b34a, #e05a34, #1f8a4c); }
+.coach-meter i { position: absolute; top: -4px; width: 4px; height: 16px; border-radius: 2px; transform: translateX(50%); box-shadow: 0 0 0 2px #fff; transition: inset-inline-start .2s; }
+.coach-text { display: grid; gap: 3px; line-height: 1.5; }
+.coach-hint { font-weight: 500; color: var(--ink); border-top: 1px dashed var(--line); padding-top: 4px; }
+.plan-heat-legend { position: absolute; inset-inline-end: 10px; bottom: 10px; background: rgba(255,255,255,.92); border-radius: 10px; padding: 6px 10px; font-size: 12px; display: grid; gap: 3px; min-width: 170px; z-index: 2; pointer-events: none; }
+.plan-heat-legend i { display: block; height: 8px; border-radius: 4px; }
+.insights-card { display: grid; gap: 6px; font-size: 13.5px; }
+.insights-card .steps-list li { margin-bottom: 4px; }
+@media (max-width: 760px) {
+  .coach { position: static; width: auto; margin: 8px; }
+  .plan-heat-legend { position: static; margin: 8px; }
+}
+.price-src { display: grid; gap: 3px; font-size: 13px; }
+.price-src .lbl { justify-self: start; }
+.src-link { font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+/* לשוניות לפי שלבים */
+.stage-tabs { gap: 2px; align-items: stretch; }
+.stage-group { display: grid; gap: 2px; padding: 2px 6px; border-inline-start: 1px solid var(--line); }
+.stage-group:first-child { border-inline-start: none; }
+.stage-name { font-size: 11px; color: var(--muted); white-space: nowrap; padding-inline-start: 4px; }
+.stage-name b { color: var(--accent); }
+.stage-row { display: flex; gap: 2px; }
+.step-n { width: auto; min-width: 26px; padding: 0 4px; border-radius: 11px; }

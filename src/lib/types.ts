@@ -324,7 +324,7 @@ export interface Project {
   city?: string // עיר שנבחרה ידנית (כשלא זוהתה מהכתובת)
   north: number
   northSet?: boolean // כיוון הצפון אושר או הוזן ידנית
-  sheet?: { subtitle?: string; studioName?: string; studioAddress?: string; gush?: string; helka?: string; drawingNo?: string; planner?: string; poem?: string; post?: string } // שדות גיליון ההדפסה
+  sheet?: { subtitle?: string; studioName?: string; studioAddress?: string; gush?: string; helka?: string; drawingNo?: string; planner?: string; poem?: string; post?: string; camAz?: number; camEl?: number; camZoom?: number } // שדות גיליון ההדפסה, וזווית ההדמיה
   soil: string
   levelsNote: string
   permit: Permit | null

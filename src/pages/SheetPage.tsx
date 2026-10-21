@@ -5,7 +5,8 @@ import { Link, useParams } from 'react-router-dom'
 import { updateProject, useApp } from '../lib/store'
 import type { FolderInput, SheetModel } from '../lib/sheet/types'
 import { fromFolder } from '../lib/sheet/fromFolder'
-import { DEFAULT_POEM, fromProject } from '../lib/sheet/fromProject'
+import { fromProject } from '../lib/sheet/fromProject'
+import { haikuSuggestions, postSuggestions } from '../lib/sheet/suggest'
 import { renderView } from '../lib/sheet/render3d'
 import { Sheet, sheetCss, type SheetImages } from '../components/sheet/Sheet'
 import { Empty, Loading, toast } from '../components/ui'
@@ -35,8 +36,10 @@ function useImages(model: SheetModel | null) {
     let alive = true
     const id = requestAnimationFrame(() => {
       try {
-        const main = renderView(model.scene, { width: 2600, height: 1423, view: 'persp', callouts: model.callouts })
-        const iso = renderView(model.scene, { width: 3300, height: 560, view: 'iso' })
+        const cam = model.camera ?? { az: 0, el: 20, zoom: 1 }
+        const main = renderView(model.scene, { width: 2600, height: 1423, view: 'persp', callouts: model.callouts, az: cam.az, el: cam.el, zoom: cam.zoom })
+        // הרצועה האיזומטרית מסתובבת יחד עם ההדמיה הראשית
+        const iso = renderView(model.scene, { width: 3300, height: 560, view: 'iso', az: cam.az })
         if (alive) setImg({ main: main.dataUrl, iso: iso.dataUrl, anchors: main.anchors, checks: [...main.checks, ...iso.checks.map((c) => ({ ...c, text: `איזומטרי: ${c.text}` }))] })
       } catch (e) {
         if (alive) setImg({ main: null, iso: null, anchors: [], checks: [{ ok: false, text: `ההדמיה לא נוצרה: ${(e as Error).message}` }] })
@@ -131,6 +134,14 @@ function SheetView({ model, onReady, side }: { model: SheetModel; onReady?: (r: 
   return (
     <div className="sheet-layout">
       <style>{sheetCss('/fonts/')}</style>
+      {/* בהדפסה מתוך האפליקציה: רק דף הגליון, במקום קבוע, בעמוד אחד */}
+      <style>{`@media print {
+  body * { visibility: hidden !important; }
+  .sheet-page, .sheet-page * { visibility: visible !important; }
+  .sheet-page { position: fixed !important; top: 0 !important; left: 0 !important; right: auto !important; margin: 0 !important; }
+  .sheet-page * { break-inside: auto !important; page-break-inside: auto !important; break-after: auto !important; }
+  html, body { height: 291mm !important; overflow: hidden !important; }
+}`}</style>
       <div className="sheet-stage" ref={wrap}>
         {img ? <Sheet model={model} images={img} /> : <Loading text="בונה הדמיה ותוכניות" />}
       </div>
@@ -166,6 +177,21 @@ function SheetView({ model, onReady, side }: { model: SheetModel; onReady?: (r: 
   )
 }
 
+// מחוון שמעדכן את ההדמיה רק בסיום הגרירה (הרינדור כבד)
+function CamSlider({ label, min, max, step, unit, value, onCommit }: { label: string; min: number; max: number; step: number; unit: string; value: number; onCommit: (v: number) => void }) {
+  const [v, setV] = useState(value)
+  useEffect(() => setV(value), [value])
+  return (
+    <label className="field">
+      <span>
+        {label}: <bdi className="num">{unit ? v.toFixed(0) : v.toFixed(2)}</bdi>
+        {unit}
+      </span>
+      <input type="range" min={min} max={max} step={step} value={v} onChange={(e) => setV(Number(e.target.value))} onPointerUp={() => onCommit(v)} onKeyUp={() => onCommit(v)} onBlur={() => v !== value && onCommit(v)} aria-label={label} />
+    </label>
+  )
+}
+
 // מצב פרויקט: /p/:id/sheet
 export default function SheetPage() {
   const { id } = useParams()
@@ -185,7 +211,15 @@ export default function SheetPage() {
         </Empty>
       </div>
     )
-  const set = (k: keyof NonNullable<typeof project.sheet>, v: string) => updateProject(project.id, (p) => ({ ...p, sheet: { ...p.sheet, [k]: v } }))
+  const set = (k: keyof NonNullable<typeof project.sheet>, v: string | number) => updateProject(project.id, (p) => ({ ...p, sheet: { ...p.sheet, [k]: v } }))
+  const haikus = haikuSuggestions(project)
+  const posts = postSuggestions(project)
+  // דפדוף בין ההצעות: הבאה אחרי הנוכחית
+  const cycle = (k: 'poem' | 'post', list: string[]) => {
+    const cur = (k === 'poem' ? o.poem ?? model.poem : o.post ?? model.post).trim()
+    const i = list.findIndex((x) => x.trim() === cur)
+    set(k, list[(i + 1) % list.length])
+  }
   const field = (k: keyof NonNullable<typeof project.sheet>, label: string, ph = '') => (
     <label className="field">
       <span>{label}</span>
@@ -210,12 +244,9 @@ export default function SheetPage() {
   }
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'end', flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <div className="eyebrow">
-            <Link to={`/p/${project.id}`}>{project.name}</Link> / גליון להדפסה
-          </div>
-          <h1 className="h-page">גליון להדפסה</h1>
+      <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div className="muted" style={{ fontSize: 14 }}>
+          דף <b>A4 לאורך</b>: הדמיה, תוכנית, לוח חומרים ופרטי הפרויקט. עורכים בצד, ומדפיסים או שומרים כ-PDF.
         </div>
         <div className="row" style={{ gap: 6 }}>
           <IconBtn icon="print" label="הדפסה או שמירה כ-PDF" className="primary" onClick={printPage} testId="sheet-print" />
@@ -234,13 +265,23 @@ export default function SheetPage() {
             {field('drawingNo', 'מספר שרטוט', model.meta.drawingNo)}
             {field('planner', 'מתכנן', 'אד׳ ענת שטיבלמן')}
             <label className="field">
-              <span>הייקו, שלוש שורות</span>
-              <textarea className="input" rows={3} value={o.poem ?? ''} placeholder={DEFAULT_POEM} onChange={(e) => set('poem', e.target.value)} />
+              <span>הייקו, שלוש שורות: הצעה, אפשר לערוך</span>
+              <textarea className="input" rows={3} value={o.poem ?? model.poem} onChange={(e) => set('poem', e.target.value)} data-testid="sheet-poem" />
             </label>
+            <button type="button" className="btn small" onClick={() => cycle('poem', haikus)}>
+              הצעה אחרת להייקו
+            </button>
             <label className="field">
-              <span>פוסט</span>
-              <textarea className="input" rows={4} value={o.post ?? ''} placeholder={model.post} onChange={(e) => set('post', e.target.value)} />
+              <span>פוסט: הצעה, אפשר לערוך</span>
+              <textarea className="input" rows={5} value={o.post ?? model.post} onChange={(e) => set('post', e.target.value)} data-testid="sheet-post" />
             </label>
+            <button type="button" className="btn small" onClick={() => cycle('post', posts)}>
+              הצעה אחרת לפוסט
+            </button>
+            <b style={{ marginTop: 6 }}>זווית ההדמיה</b>
+            <CamSlider label="סיבוב סביב המבנה" min={-180} max={180} step={15} unit="°" value={o.camAz ?? 0} onCommit={(v) => set('camAz', v)} />
+            <CamSlider label="גובה המבט" min={6} max={70} step={2} unit="°" value={o.camEl ?? 20} onCommit={(v) => set('camEl', v)} />
+            <CamSlider label="קרבה" min={0.6} max={1.8} step={0.1} unit="" value={o.camZoom ?? 1} onCommit={(v) => set('camZoom', v)} />
           </div>
         }
       />

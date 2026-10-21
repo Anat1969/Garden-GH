@@ -200,6 +200,7 @@ export interface SheetModel {
   callouts: CalloutIn[]
   poem: string
   post: string
+  camera?: { az: number; el: number; zoom: number } // זווית ההדמיה הראשית: סיבוב, גובה מבט וקרבה
   assumptions: string[] // מה הושלם בהנחה
   checks: { ok: boolean; text: string }[]
 }
