@@ -140,6 +140,15 @@ export function structureToElements(p: Project, newId: () => string): Element[] 
       source: `${src}${z.label ? ` (${z.label})` : ''}`,
       approved: false,
     }
+    // מדרגות: המפלס העליון ב-level, התחתון וכיוון הירידה מהקריאה (בתוכנית y כלפי מטה, דרום)
+    if (z.kind === 'stairs' && z.levelToAbs != null && base !== null && z.down) {
+      const top = abs !== null ? abs : z.levelToAbs
+      const hi = Math.max(top, z.levelToAbs)
+      const lo = Math.min(top, z.levelToAbs)
+      sf.level = r2(hi - base)
+      const dir = { N: { x: 0, y: -1 }, S: { x: 0, y: 1 }, E: { x: 1, y: 0 }, W: { x: -1, y: 0 } }[z.down]
+      sf.stairs = { bottom: r2(lo - base), dir }
+    }
     out.push(sf)
   }
   return out

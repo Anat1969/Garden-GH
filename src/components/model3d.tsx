@@ -6,8 +6,10 @@ import { MATERIALS } from '../lib/garden'
 import { bbox } from '../lib/geom'
 import { SurfMat, useSurfaceTexture } from './garden3d'
 import { useModelFinish } from '../lib/finish'
-import { PlasterMat, RealCrown, RealPalm, RealTrunk } from './realism3d'
-import { roofTilePBR } from '../lib/realism'
+import { RealCrown, RealPalm, RealTrunk } from './realism3d'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { stairPlan } from '../lib/stairs'
+import polygonClipping from 'polygon-clipping'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -70,6 +72,110 @@ export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: b
   )
 }
 
+// ---------- מדרגות: כל שלח מוצק מהמפלס התחתון עד גובהו, וקו דק בשפת כל מדרגה ----------
+
+export function StairSurface({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
+  const tex = useSurfaceTexture(s.material, s.color, null)
+  const { geom, edges } = useMemo(() => {
+    const plan = stairPlan(s)
+    if (!plan) return { geom: null, edges: null }
+    const parts = plan.steps.map((st) => {
+      const shape = new THREE.Shape(st.poly.map((v) => new THREE.Vector2(v.x, -v.y)))
+      const depth = Math.max(0.05, st.top - plan.bottom + 0.05)
+      const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false })
+      g.rotateX(-Math.PI / 2)
+      g.translate(0, plan.bottom - 0.05, 0)
+      return g
+    })
+    const merged = mergeGeometries(parts, false)
+    parts.forEach((g) => g.dispose())
+    return { geom: merged, edges: merged ? new THREE.EdgesGeometry(merged, 30) : null }
+  }, [s])
+  useEffect(
+    () => () => {
+      geom?.dispose()
+      edges?.dispose()
+    },
+    [geom, edges],
+  )
+  if (!geom) return <PolySurface s={s} selected={selected} onSelect={onSelect} />
+  return (
+    <group>
+      <mesh
+        geometry={geom}
+        receiveShadow
+        castShadow
+        onClick={(ev: ThreeEvent<MouseEvent>) => {
+          ev.stopPropagation()
+          onSelect(s.id)
+        }}
+      >
+        <SurfMat material={s.material} color={s.color} selected={selected} tex={tex} />
+      </mesh>
+      {edges && (
+        <lineSegments geometry={edges}>
+          <lineBasicMaterial color={selected ? '#2f5d4a' : '#6d6a60'} transparent opacity={0.55} />
+        </lineSegments>
+      )}
+    </group>
+  )
+}
+
+// ---------- גוש המגרש: כשמדרגות יורדות אל הרחוב, המגרש מוצג כגוש אדמה עם חתך המדרגות ----------
+
+export function SitePlinth({ plot, cuts, top, bottom, onClick }: { plot: Pt[]; cuts: Pt[][]; top: number; bottom: number; onClick: () => void }) {
+  const { geom, edges } = useMemo(() => {
+    const ring = (ps: Pt[]): [number, number][] => [...ps.map((p) => [p.x, p.y] as [number, number]), [ps[0].x, ps[0].y]]
+    let mp: polygonClipping.MultiPolygon = [[ring(plot)]]
+    try {
+      if (cuts.length) mp = polygonClipping.difference(mp, ...cuts.map((c) => [ring(c)] as polygonClipping.Polygon))
+    } catch {
+      /* חיתוך שנכשל: הגוש בלי חתך */
+    }
+    const shapes = mp.map((poly) => {
+      const sh = new THREE.Shape(poly[0].map(([x, y]) => new THREE.Vector2(x, -y)))
+      for (const h of poly.slice(1)) sh.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x, -y))))
+      return sh
+    })
+    const g = new THREE.ExtrudeGeometry(shapes, { depth: Math.max(0.05, top - bottom), bevelEnabled: false })
+    g.rotateX(-Math.PI / 2)
+    g.translate(0, bottom, 0)
+    return { geom: g, edges: new THREE.EdgesGeometry(g, 30) }
+  }, [plot, cuts, top, bottom])
+  useEffect(
+    () => () => {
+      geom.dispose()
+      edges.dispose()
+    },
+    [geom, edges],
+  )
+  return (
+    <group>
+      <mesh
+        geometry={geom}
+        receiveShadow
+        onClick={(ev: ThreeEvent<MouseEvent>) => {
+          ev.stopPropagation()
+          onClick()
+        }}
+      >
+        <meshStandardMaterial color="#d8d0bf" roughness={1} />
+      </mesh>
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial color="#8f8676" transparent opacity={0.6} />
+      </lineSegments>
+    </group>
+  )
+}
+
+// ---------- הבית: מסה אחידה ושקופה למחצה ----------
+
+export const HOUSE_COLOR = '#e6e3dc'
+export const HOUSE_OPACITY = 0.72
+export function HouseMat({ sel = false }: { sel?: boolean }) {
+  return <meshStandardMaterial color={sel ? '#2f5d4a' : HOUSE_COLOR} emissive={sel ? '#2f5d4a' : '#000000'} emissiveIntensity={sel ? 0.3 : 0} roughness={0.85} transparent opacity={sel ? 0.95 : HOUSE_OPACITY} side={THREE.DoubleSide} depthWrite />
+}
+
 // ---------- מסת הקומות העליונות והגג ----------
 
 export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Building }) {
@@ -88,8 +194,7 @@ export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Buildin
   )
 }
 
-function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
-  const real = useModelFinish() === 'detailed'
+function UpperBlock({ fp, z0, z1 }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
   const geom = useMemo(() => {
     const shape = new THREE.Shape(fp.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false })
@@ -99,7 +204,7 @@ function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: num
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} position={[0, z0, 0]} castShadow receiveShadow>
-      {real && !roof ? <PlasterMat L={1} H={1} /> : <meshStandardMaterial color={real && roof ? '#9b9890' : color} roughness={0.92} />}
+      <HouseMat />
     </mesh>
   )
 }
@@ -108,7 +213,7 @@ function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: num
 function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
   const geom = useMemo(() => {
     const bb = bbox(fp)
-    const o = 0.4 // בליטת גג
+    const o = 0 // בלי בליטות: מסה נקייה
     const x0 = bb.x - o
     const x1 = bb.x + bb.w + o
     const z0 = bb.y - o
@@ -142,15 +247,9 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
     return g
   }, [fp, eave, ridge])
   useEffect(() => () => geom.dispose(), [geom])
-  const real = useModelFinish() === 'detailed'
-  const tiles = real ? roofTilePBR() : null
   return (
-    <mesh geometry={geom} castShadow receiveShadow>
-      {tiles ? (
-        <meshStandardMaterial map={tiles.map} normalMap={tiles.normalMap} normalScale={new THREE.Vector2(1.6, 1.6)} roughnessMap={tiles.roughnessMap} side={THREE.DoubleSide} />
-      ) : (
-        <meshStandardMaterial color="#9a9d99" roughness={0.85} side={THREE.DoubleSide} />
-      )}
+    <mesh geometry={geom} castShadow>
+      <HouseMat />
     </mesh>
   )
 }

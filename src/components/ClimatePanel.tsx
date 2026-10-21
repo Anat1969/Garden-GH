@@ -9,7 +9,8 @@ import { fmtNum } from '../lib/bom'
 import { CITIES } from '../data/israelCities'
 import { bestSpots, buildGrid, comfortMap, RAMPS, shadeMap, shadeNow, siteInfo, siteStats, WIND, windMap, exposure, type Grid, type WindRegime } from '../lib/climate'
 import { fmtHour, SEASONS, sunAt, sunriseSunset, type Season } from '../lib/sun'
-import { Tag } from './ui'
+import { Rich, Tag } from './ui'
+import { computeClimate3, plannerInsights } from '../lib/climateScores'
 import { IconBtn } from './EditIcons'
 
 export type ClimateLayer = 'none' | 'sun' | 'wind' | 'comfort'
@@ -42,12 +43,14 @@ export interface ClimateState {
   mapMode: 'day' | 'now'
   windDir: number | null
   windSpeed: number | null
+  year: boolean // נוחות לישיבה בשקלול כל השנה
 }
 
 export function useClimateState() {
   const [params, setParams] = useSearchParams()
   const layer = (params.get('layer') as ClimateLayer) || 'none'
   const season = (params.get('season') as Season) || 'winter'
+  const year = params.get('year') === '1'
   const [hour, setHour] = useState(10)
   const [mapMode, setMapMode] = useState<'day' | 'now'>('day')
   const [windDir, setWindDir] = useState<number | null>(null)
@@ -60,7 +63,8 @@ export function useClimateState() {
     setParams(p, { replace: true })
   }
   return {
-    st: { layer, season, hour, mapMode, windDir, windSpeed } as ClimateState,
+    st: { layer, season, hour, mapMode, windDir, windSpeed, year } as ClimateState,
+    setYear: (v: boolean) => setParam('year', v ? '1' : null),
     playing,
     setPlaying,
     setLayer: (l: ClimateLayer) => setParam('layer', l === 'none' ? null : l),
@@ -100,7 +104,8 @@ export function useClimateData(project: Project, elements: Element[], st: Climat
   const sm = useMemo(() => (needShade ? shadeMap(grid!, st.season, lat, lon, site.north) : null), [needShade, grid, st.season, lat, lon, site.north]) // eslint-disable-line react-hooks/exhaustive-deps
   const now = useMemo(() => (grid && st.layer === 'sun' && st.mapMode === 'now' ? shadeNow(grid, sun.az, sun.el, site.north) : null), [grid, st.layer, st.mapMode, sun.az, sun.el, site.north])
   const wm = useMemo(() => (needWind ? windMap(grid!, wind, site.north, site.elev) : null), [needWind, grid, wind.dir, wind.speed, site.north, site.elev]) // eslint-disable-line react-hooks/exhaustive-deps
-  const cm = useMemo(() => (st.layer === 'comfort' && sm && wm ? comfortMap(st.season, sm.shade, wm) : null), [st.layer, st.season, sm, wm])
+  const c3 = useMemo(() => (st.layer === 'comfort' && st.year ? computeClimate3(project, elements) : null), [st.layer, st.year, project, elements])
+  const cm = useMemo(() => (st.layer === 'comfort' ? (c3 ? c3.comfort.year : sm && wm ? comfortMap(st.season, sm.shade, wm) : null) : null), [st.layer, st.season, sm, wm, c3])
   const spots = useMemo(
     () =>
       grid && cm && sm
@@ -282,6 +287,11 @@ export function ClimatePanel({ project, data, state }: { project: Project; data:
             <span className="muted" style={{ fontSize: 13 }}>
               {SEASONS.find((s) => s.id === st.season)!.date}
             </span>
+            {st.layer === 'comfort' && (
+              <button type="button" className={`btn small ${st.year ? 'active' : ''}`} aria-pressed={st.year} onClick={() => state.setYear(!st.year)} data-testid="comfort-year">
+                שקלול כל השנה
+              </button>
+            )}
           </div>
 
           {st.layer === 'sun' && (
@@ -364,6 +374,11 @@ export function placeSeating(project: Project, elements: Element[], data: Climat
 
 // תובנות ומקרא בעמודת הצד, ליד המודל
 export function ClimateInsights({ data, st, project, elements }: { data: ClimateData; st: ClimateState; project: Project; elements: Element[] }) {
+  const tips = useMemo(() => {
+    if (st.layer === 'none') return []
+    const c = computeClimate3(project, elements)
+    return c ? plannerInsights(c) : []
+  }, [st.layer, project, elements])
   if (st.layer === 'none') return null
   return (
     <div className="card flat climate-insights" data-testid="climate-insights">
@@ -379,6 +394,27 @@ export function ClimateInsights({ data, st, project, elements }: { data: Climate
             <div key={s.k} className={`stat ${s.tone ?? ''}`}>
               <span>{s.k}</span>
               <b>{s.v}</b>
+            </div>
+          ))}
+        </div>
+      )}
+      {tips.length > 0 && (
+        <div className="insights-card" data-testid="model-insights">
+          <b>תובנות למתכנן</b>
+          <ol className="steps-list">
+            {tips.map((t) => (
+              <li key={t}>
+                <Rich text={t} />
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {st.layer === 'comfort' && data.spots.length > 0 && (
+        <div className="spot-list" data-testid="spot-list">
+          {data.spots.map((s, i) => (
+            <div key={i}>
+              <b>מקום {i + 1}:</b> ציון {Math.round(s.score * 100)}, צל {Math.round(s.shade * 100)}% מהיום
             </div>
           ))}
         </div>

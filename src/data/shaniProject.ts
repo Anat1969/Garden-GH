@@ -13,24 +13,50 @@ const m = (x: number, y: number): Pt => ({ x: MIRROR_X - x, y })
 const mirror = (ps: Pt[]) => ps.map((p) => m(p.x, p.y)).reverse()
 const P = (x: number, y: number): Pt => ({ x, y })
 
+// קריאה שנייה מול התוכנית (גרסה 2): פטיו מעגלי בדרום, מדרגות לאורך הגבול המערבי והמזרחי,
+// דשא בפינות, רצועת גינון עם דקלים, גגוני חניה בצפון, שבילים משערי הרחוב, ותיקון קו הבית.
 const westUnit: Pt[] = [
-  P(800, 975), P(1105, 975), P(1105, 1400), P(1435, 1400), P(1435, 1225), P(1700, 1225),
-  P(1700, 1945), P(1460, 1945), P(1460, 2000), P(1080, 2000), P(1040, 1990), P(1010, 1960),
-  P(1000, 1920), P(1000, 1440), P(900, 1440), P(900, 1320), P(800, 1320),
+  P(800, 1000), P(1105, 1000), P(1105, 1400), P(1435, 1400), P(1435, 1225), P(1700, 1225),
+  P(1700, 1985), P(1460, 1985), P(1460, 2040), P(1080, 2040), P(1035, 2025), P(1000, 1990),
+  P(983, 1935), P(983, 1456), P(900, 1456), P(900, 1320), P(800, 1320),
 ]
 
 type Op = PlanStructure['openings'][number]
 const westOpenings: Op[] = [
-  { type: 'door', a: P(1000, 1460), b: P(1000, 1550) },
-  { type: 'window', a: P(1000, 1560), b: P(1000, 1610) },
-  { type: 'sliding_door', a: P(1000, 1660), b: P(1000, 1905) },
-  { type: 'window', a: P(1080, 2000), b: P(1165, 2000) },
-  { type: 'sliding_door', a: P(1330, 2000), b: P(1455, 2000) },
-  { type: 'window', a: P(1560, 1945), b: P(1665, 1945) },
+  { type: 'door', a: P(983, 1490), b: P(983, 1580) },
+  { type: 'window', a: P(983, 1592), b: P(983, 1625) },
+  { type: 'sliding_door', a: P(983, 1690), b: P(983, 1930) },
+  { type: 'window', a: P(1088, 2040), b: P(1171, 2040) },
+  { type: 'sliding_door', a: P(1374, 2040), b: P(1458, 2040) },
+  { type: 'window', a: P(1600, 1985), b: P(1690, 1985) },
 ]
 const eastOpenings: Op[] = westOpenings.map((o) => ({ type: o.type, a: m(o.a.x, o.a.y), b: m(o.b.x, o.b.y) }))
 
-const nwLawn = [P(330, 700), P(1100, 620), P(1100, 975), P(800, 975), P(800, 1380), P(380, 1380)]
+// גבול המגרש הצפוני יורד מזרחה: y = 640 - 0.1207 (x - 300)
+const northY = (x: number) => Math.round(640 - 0.1207 * (x - 300))
+const plot: Pt[] = [P(299, 613), P(2975, 290), P(2992, 2486), P(2399, 2460), P(1700, 2455), P(1010, 2470), P(406, 2497)]
+// שימור צורה בתוך גבול המגרש במזרח (המגרש לא סימטרי לגמרי)
+const clampE = (ps: Pt[]) => ps.map((p) => ({ x: Math.min(p.x, 2980), y: p.y }))
+
+// הפטיו: רצועה לאורך החזית המערבית וקשת מעגלית מתחת לחזית הדרומית
+const westPatio: Pt[] = [
+  P(400, 1400), P(983, 1400), P(983, 1935), P(1000, 1990), P(1035, 2025), P(1080, 2040), P(1460, 2040), P(1460, 1985), P(1700, 1985),
+  P(1700, 2320), P(1386, 2299), P(1178, 2257), P(970, 2164), P(834, 2028), P(751, 1883), P(730, 1758), P(593, 1700), P(396, 1665),
+]
+const westStairs: Pt[] = [P(396, 1665), P(593, 1700), P(600, 2485), P(406, 2497)]
+const swLawn: Pt[] = [P(600, 2050), P(708, 2050), P(780, 1960), P(834, 2028), P(970, 2164), P(1004, 2180), P(1004, 2470), P(600, 2485)]
+const westPlanter: Pt[] = [P(562, 1903), P(708, 1903), P(708, 2049), P(562, 2049)]
+const nwLawn: Pt[] = [P(305, 650), P(949, northY(949)), P(949, 800), P(803, 800), P(803, 1000), P(689, 1014), P(689, 1440), P(345, 1440)]
+const nwSteps: Pt[] = [P(689, 1014), P(803, 1014), P(803, 1400), P(689, 1400)]
+const southPlanting: Pt[] = [
+  P(1004, 2180), P(1178, 2257), P(1386, 2299), P(1700, 2320), P(2014, 2299), P(2222, 2257), P(2396, 2180), P(2399, 2460), P(1700, 2455), P(1010, 2470),
+]
+const northPaving: Pt[] = [
+  P(949, northY(949)), P(2451, northY(2451)), P(2451, 800), P(2597, 800), P(2597, 1108), P(1827, 1108), P(1827, 1225),
+  P(1573, 1225), P(1573, 1108), P(803, 1108), P(803, 800), P(949, 800),
+]
+// הדשא הצפון-מזרחי עולה עד הגבול הצפוני המשופע, ולכן אינו מראה של המערבי
+const neLawn: Pt[] = [P(2451, northY(2451)), P(2975, northY(2975)), P(2980, 1440), P(2711, 1440), P(2711, 1014), P(2597, 1000), P(2597, 800), P(2451, 800)]
 
 export const SHANI_STRUCTURE: Omit<PlanStructure, 'drawingId' | 'readAt'> = {
   northDeg: 315,
@@ -39,27 +65,22 @@ export const SHANI_STRUCTURE: Omit<PlanStructure, 'drawingId' | 'readAt'> = {
     { name: 'יחידה מזרחית', footprint: mirror(westUnit), wallCm: 25, levelRel: 0, levelAbs: 699 },
   ],
   openings: [...westOpenings, ...eastOpenings],
-  plot: [P(295, 590), P(2975, 300), P(2985, 2460), P(2300, 2440), P(1700, 2425), P(1100, 2440), P(440, 2460)],
+  plot,
   zones: [
-    {
-      kind: 'paving',
-      label: 'ריצוף מערבי ודרומי',
-      polygon: [P(560, 1450), P(1000, 1450), P(1000, 2000), P(1700, 2000), P(1700, 2320), P(900, 2300), P(560, 2150)],
-      levelAbs: 698.85,
-    },
-    {
-      kind: 'paving',
-      label: 'ריצוף מזרחי ודרומי',
-      polygon: [P(1700, 2000), P(2400, 2000), P(2400, 1450), P(2840, 1450), P(2840, 2150), P(2500, 2300), P(1700, 2320)],
-      levelAbs: 698.85,
-    },
-    { kind: 'lawn', label: 'דשא דרום-מערבי', polygon: [P(450, 2160), P(900, 2310), P(1000, 2440), P(445, 2455)], levelAbs: 699.25 },
-    { kind: 'planting', label: 'גינון', polygon: [P(1000, 2330), P(2400, 2330), P(2300, 2435), P(1100, 2438)], levelAbs: 699.25 },
-    { kind: 'lawn', label: 'דשא דרום-מזרחי', polygon: [P(2500, 2310), P(2950, 2160), P(2960, 2455), P(2400, 2440)], levelAbs: 699.25 },
+    { kind: 'paving', label: 'פטיו מערבי', polygon: westPatio, levelAbs: 698.85 },
+    { kind: 'paving', label: 'פטיו מזרחי', polygon: clampE(mirror(westPatio)), levelAbs: 698.85 },
+    { kind: 'stairs', label: 'מדרגות מערביות לרחוב', polygon: westStairs, levelAbs: 698.85, levelToAbs: 694.21, down: 'S' },
+    { kind: 'stairs', label: 'מדרגות מזרחיות לרחוב', polygon: clampE(mirror(westStairs)), levelAbs: 698.85, levelToAbs: 694.3, down: 'S' },
+    { kind: 'lawn', label: 'דשא דרום-מערבי', polygon: swLawn, levelAbs: 699.25 },
+    { kind: 'lawn', label: 'דשא דרום-מזרחי', polygon: clampE(mirror(swLawn)), levelAbs: 699.25 },
+    { kind: 'planting', label: 'ערוגת עץ מערבית', polygon: westPlanter, levelAbs: 699.25 },
+    { kind: 'planting', label: 'ערוגת עץ מזרחית', polygon: mirror(westPlanter), levelAbs: 699.25 },
+    { kind: 'planting', label: 'גינון דרומי עם דקלים', polygon: southPlanting, levelAbs: 699.25 },
     { kind: 'lawn', label: 'דשא צפון-מערבי', polygon: nwLawn, levelAbs: 698.8 },
-    { kind: 'lawn', label: 'דשא צפון-מזרחי', polygon: [P(2300, 620), P(2975, 560), P(2975, 1380), P(2600, 1380), P(2600, 975), P(2300, 975)], levelAbs: 698.8 },
-    { kind: 'paving', label: 'חצר צפונית', polygon: [P(1100, 610), P(2300, 500), P(2300, 975), P(1100, 975)], levelAbs: 698.9 },
-    { kind: 'stairs', label: 'מדרגות מערביות', polygon: [P(380, 1650), P(570, 1650), P(570, 2150), P(420, 2150)], levelAbs: 0 },
+    { kind: 'lawn', label: 'דשא צפון-מזרחי', polygon: neLawn, levelAbs: 698.8 },
+    { kind: 'stairs', label: 'מדרגות למחסן מערבי', polygon: nwSteps, levelAbs: 698.85, levelToAbs: 698, down: 'N' },
+    { kind: 'stairs', label: 'מדרגות למחסן מזרחי', polygon: mirror(nwSteps), levelAbs: 698.85, levelToAbs: 698, down: 'N' },
+    { kind: 'parking', label: 'חניה וחצר כניסה', polygon: northPaving, levelAbs: 698.9 },
   ],
   levels: [
     { text: '±0.00 699.00', abs: 699, rel: 0, at: P(1170, 1585) },
@@ -71,24 +92,38 @@ export const SHANI_STRUCTURE: Omit<PlanStructure, 'drawingId' | 'readAt'> = {
     { text: '699.85', abs: 699.85, rel: null, at: P(1700, 2290) },
     { text: '694.21 רחוב', abs: 694.21, rel: null, at: P(1390, 2525) },
     { text: '694.30 רחוב', abs: 694.3, rel: null, at: P(2040, 2525) },
-    { text: '701.00', abs: 701, rel: null, at: P(295, 590) },
+    { text: '701.20', abs: 701.2, rel: null, at: P(300, 640) },
     { text: '700.40', abs: 700.4, rel: null, at: P(935, 490) },
+    { text: '701.00', abs: 701, rel: null, at: P(2975, 560) },
     { text: '698.90', abs: 698.9, rel: null, at: P(1180, 710) },
     { text: '-1.00 698.00 מחסן', abs: 698, rel: -1, at: P(885, 1125) },
   ],
   trees: [
-    { at: P(440, 1140), r: 110, kind: 'tree' },
-    { at: P(585, 1775), r: 105, kind: 'tree' },
-    { at: P(420, 1730), r: 60, kind: 'palm' },
-    { at: P(1390, 2310), r: 90, kind: 'palm' },
-    { at: P(1880, 2280), r: 90, kind: 'palm' },
-    { at: P(900, 2160), r: 35, kind: 'shrub' },
-    { at: P(1000, 2180), r: 35, kind: 'shrub' },
-    { at: P(1630, 2190), r: 40, kind: 'shrub' },
-    { at: P(1770, 2170), r: 40, kind: 'shrub' },
-    { at: P(2900, 1140), r: 110, kind: 'tree' },
+    { at: P(445, 1170), r: 115, kind: 'tree' },
+    { at: P(2955, 1170), r: 115, kind: 'tree' },
+    { at: P(614, 1966), r: 190, kind: 'tree' },
+    { at: P(2786, 1966), r: 190, kind: 'tree' },
+    { at: P(427, 1446), r: 60, kind: 'palm' },
+    { at: P(1488, 2393), r: 90, kind: 'palm' },
+    { at: P(1889, 2351), r: 90, kind: 'palm' },
+    { at: P(765, 2179), r: 35, kind: 'shrub' },
+    { at: P(874, 2205), r: 35, kind: 'shrub' },
+    { at: P(1613, 2216), r: 40, kind: 'shrub' },
+    { at: P(1785, 2184), r: 40, kind: 'shrub' },
   ],
-  retaining: [{ a: P(300, 560), b: P(2975, 290), label: 'קיר תומך לקיר פיתוח' }],
+  retaining: [{ a: P(300, 580), b: P(2975, 258), label: 'קיר תומך לכביש בצפון' }],
+}
+
+// גגוני החניה ושבילי הכניסה מהרחוב, במטרים (לא חלק מקריאת המבנה)
+export const SHANI_EXTRAS = {
+  canopies: [
+    { x: (803 + 1573) / 2 / PX_PER_M, y: (800 + 1108) / 2 / PX_PER_M, w: (1573 - 803) / PX_PER_M, d: (1108 - 800) / PX_PER_M },
+    { x: (1827 + 2597) / 2 / PX_PER_M, y: (800 + 1108) / 2 / PX_PER_M, w: (2597 - 1827) / PX_PER_M, d: (1108 - 800) / PX_PER_M },
+  ],
+  paths: [
+    [P(1004, 2465), P(1004, 2180)],
+    [P(2396, 2455), P(2396, 2180)],
+  ].map((l) => l.map((q) => ({ x: q.x / PX_PER_M, y: q.y / PX_PER_M }))),
 }
 
 // מהחתכים והחזיתות בהיתר: ±0.00 = 699.00, קומה א +3.00, תחילת גג +6.00, רכס +8.50
@@ -111,7 +146,7 @@ export const SHANI_BUILDING: Building = {
   source: 'קריאה ידנית של חתכים וחזיתות בהיתר',
 }
 
-export const SHANI_FLAG = 'garden-gh:shani-seeded'
+export const SHANI_FLAG = 'garden-gh:shani-seeded-v3'
 
 export function buildShaniProject(): Project {
   const now = new Date().toISOString()
@@ -152,5 +187,10 @@ export function buildShaniProject(): Project {
     updatedAt: now,
   }
   base.elements = structureToElements(p, uid).map((e) => ({ ...e, source: e.source.replace('קריאת מבנה', 'קריאת מבנה ידנית') }))
+  const src = 'קריאה ידנית מהתוכנית'
+  for (const c of SHANI_EXTRAS.canopies)
+    base.elements.push({ id: uid(), kind: 'object', type: 'pergola', x: c.x, y: c.y, w: c.w, d: c.d, h: 2.6, rot: 0, level: -0.1, color: '#8d8a84', label: 'estimated', source: `${src} (גגון חניה)`, approved: false })
+  for (const pts of SHANI_EXTRAS.paths)
+    base.elements.push({ id: uid(), kind: 'line', type: 'path', pts, width: 1.2, height: 0.06, level: 0.25, label: 'estimated', source: `${src} (שביל משער הרחוב)`, approved: false })
   return p
 }

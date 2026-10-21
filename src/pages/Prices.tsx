@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { defaultPrices, setPrices, useApp } from '../lib/store'
-import { DEKEL_DATE, DEKEL_SOURCES } from '../data/dekelPrices'
+import { DEKEL_DATE, DEKEL_SOURCES, sourceOf } from '../data/dekelPrices'
 import { PageIntro } from '../components/PageIntro'
 import { DataTable } from '../components/DataTable'
 import { IconBtn } from '../components/EditIcons'
@@ -44,7 +44,15 @@ export default function Prices() {
     toast(`קטגוריות: ${cats}`)
   }
 
-  const list = prices.filter((p) => !q || p.description.includes(q) || p.code.includes(q))
+  // חיפוש: כל המילים, בתיאור, בקוד, בקטגוריה ובמקור. ההתאמות מסומנות בטבלה
+  const words = q.trim().split(/\s+/).filter(Boolean)
+  const hay = (p: PriceItem) => `${p.description} ${p.code} ${CATEGORY_TEXT[p.category as Category] ?? p.category} ${p.source}`
+  const list = prices.filter((p) => words.every((w) => hay(p).includes(w)))
+  const Hl = ({ text }: { text: string }) => {
+    if (!words.length) return <>{text}</>
+    const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g')
+    return <>{text.split(re).map((x, i) => (i % 2 ? <mark key={i}><b>{x}</b></mark> : x))}</>
+  }
 
   return (
     <div className="stack" style={{ gap: 18 }}>
@@ -133,7 +141,14 @@ export default function Prices() {
         </div>
       ) : (
         <>
-          <input className="input" style={{ maxWidth: 320 }} placeholder="חיפוש סעיף" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש סעיף" />
+          <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+            <input className="input" type="search" style={{ maxWidth: 320 }} placeholder="חיפוש: מילה, קוד, קטגוריה או מקור" value={q} onChange={(e) => setQ(e.target.value)} aria-label="חיפוש סעיף" data-testid="prices-search" />
+            {words.length > 0 && (
+              <span className="muted" data-testid="prices-found">
+                נמצאו <b>{list.length}</b> סעיפים
+              </span>
+            )}
+          </div>
           <DataTable<PriceItem>
             testId="prices-table"
             caption="סעיפי המחירון"
@@ -146,8 +161,8 @@ export default function Prices() {
               { key: 'source', label: 'מקור', value: (p) => p.source },
             ]}
             cols={[
-              { key: 'code', label: 'קוד', sort: (p) => p.code, render: (p) => <span className="mono">{p.code}</span> },
-              { key: 'desc', label: 'תיאור', sort: (p) => p.description, render: (p) => p.description, minWidth: 220 },
+              { key: 'code', label: 'קוד', sort: (p) => p.code, render: (p) => <span className="mono"><Hl text={p.code} /></span> },
+              { key: 'desc', label: 'תיאור', sort: (p) => p.description, render: (p) => <Hl text={p.description} />, minWidth: 220 },
               { key: 'cat', label: 'קטגוריה', sort: (p) => CATEGORY_TEXT[p.category as Category] ?? p.category, render: (p) => CATEGORY_TEXT[p.category as Category] ?? (p.category || 'ללא') },
               {
                 key: 'price',
@@ -163,12 +178,24 @@ export default function Prices() {
                 key: 'src',
                 label: 'מקור',
                 sort: (p) => p.source,
-                render: (p) => (
-                  <span className="muted">
-                    {p.source} {p.date}
-                    {!p.verified && <span className="lbl assumed" style={{ marginInlineStart: 6 }}>לא מאומת</span>}
-                  </span>
-                ),
+                render: (p) => {
+                  const src = sourceOf(p.source)
+                  return (
+                    <span className="price-src">
+                      <span className="muted">
+                        <Hl text={p.source} /> · {p.date}
+                      </span>
+                      {src ? (
+                        <a href={src.url} target="_blank" rel="noreferrer" className="src-link">
+                          למקור: {src.title}
+                        </a>
+                      ) : (
+                        <span className="lbl assumed">הערכה ללא מקור</span>
+                      )}
+                      {!p.verified && <span className="lbl assumed">לא מאומת</span>}
+                    </span>
+                  )
+                },
               },
             ]}
             selectable={false}

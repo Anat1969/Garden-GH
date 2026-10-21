@@ -12,7 +12,7 @@ import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTextur
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
-import { BuildingMass, Label3D, NorthArrow, PolySurface, Tree, unitFootprints } from '../components/model3d'
+import { BuildingMass, HouseMat, Label3D, NorthArrow, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
@@ -22,8 +22,7 @@ import { buildHouse, type BuildResult } from '../lib/buildHouse'
 import { PageIntro } from '../components/PageIntro'
 import { ClimateInsights, ClimatePanel, useClimateData, useClimateState, dirText, type ClimateData, type ClimateLayer } from '../components/ClimatePanel'
 import { HeatLayer, SeatSpots, SunLight, SunPath, WindArrow, WindParticles, sunVector } from '../components/climate3d'
-import { Atmosphere, GlassMat, GrassField, NatureGround, OpeningFrame, PlasterMat, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
-import { woodPBR } from '../lib/realism'
+import { Atmosphere, GrassField, NatureGround, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
 import { fmtHour } from '../lib/sun'
 import { saveDocBlob } from '../lib/idb'
 import { modelImageKey } from '../components/PrintVisuals'
@@ -46,9 +45,28 @@ function AutoSnapshot({ projectId, version, enabled }: { projectId: string; vers
   return null
 }
 
-function Controls({ target, dist, focus }: { target: [number, number, number]; dist: number; focus: { at: [number, number, number]; key: number } | null }) {
+export type ViewPreset = 'bird' | 'top' | 'eye'
+export const VIEW_PRESETS: { id: ViewPreset; t: string; d: string }[] = [
+  { id: 'bird', t: 'מבט ציפור', d: 'מבט אלכסוני על הבית והגינה' },
+  { id: 'top', t: 'מבט על', d: 'התוכנית מלמעלה, עם המידות' },
+  { id: 'eye', t: 'גובה עיניים', d: 'כמו מי שעומד בגינה' },
+]
+
+function Controls({ target, dist, focus, view }: { target: [number, number, number]; dist: number; focus: { at: [number, number, number]; key: number } | null; view: { id: ViewPreset; key: number } }) {
   const { camera, gl, invalidate } = useThree()
   const ref = useRef<OrbitImpl | null>(null)
+  // מבטים מוכנים: מבט על לתוכנית עם מידות, מבט ציפור, וגובה עיניים מהגינה
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    c.target.set(target[0], 0, target[2])
+    if (view.id === 'top') camera.position.set(target[0], dist * 1.25, target[2] + 0.01)
+    else if (view.id === 'eye') camera.position.set(target[0] + dist * 0.15, 1.65, target[2] + dist * 0.55)
+    else camera.position.set(target[0] + dist * 0.7, dist * 0.75, target[2] + dist * 0.9)
+    if (view.id === 'eye') c.target.set(target[0], 1.2, target[2])
+    c.update()
+    invalidate()
+  }, [view.key]) // eslint-disable-line react-hooks/exhaustive-deps
   // מיקוד על אלמנט שנבחר מהרשימה: המצלמה מתקרבת אליו ושומרת על כיוון המבט
   useEffect(() => {
     const c = ref.current
@@ -64,7 +82,7 @@ function Controls({ target, dist, focus }: { target: [number, number, number]; d
   useEffect(() => {
     const c = new OrbitImpl(camera, gl.domElement)
     c.enableDamping = true
-    c.maxPolarAngle = Math.PI / 2.05
+    c.maxPolarAngle = Math.PI / 2.02
     c.target.set(...target)
     camera.position.set(target[0] + dist * 0.7, dist * 0.75, target[2] + dist * 0.9)
     c.update()
@@ -131,19 +149,26 @@ const pick = (id: string, onSelect: (id: string) => void) => (ev: ThreeEvent<Mou
   onSelect(id)
 }
 
+// הבית: מסה אחידה, חלקה ושקופה למחצה, בלי חומרים. תפקידו להראות פתחים, כניסות ופרופורציות.
+// קירות הגינה נשארים בחומר שלהם. הבחירה והעריכה עובדות כרגיל.
+const ENTRY = '#c0673a' // דלתות וכניסות מודגשות
+
 function WallMesh({ w, openings, selected, onSelect }: { w: Wall; openings: Opening[]; selected: string | null; onSelect: (id: string) => void }) {
   const ang = Math.atan2(w.y2 - w.y1, w.x2 - w.x1)
   const sel = selected === w.id
   const finish = useModelFinish()
-  const color = w.scope === 'garden' ? (finish === 'massing' ? '#cfd0cc' : '#a99c86') : '#bdbfbb'
+  const house = w.scope === 'house'
+  const color = finish === 'massing' ? '#cfd0cc' : '#a99c86'
   const real = finish === 'detailed'
   return (
     <group position={[w.x1, 0, w.y1]} rotation={[0, -ang, 0]}>
       {wallPieces(w, openings).map((p, i) => (
-        <mesh key={i} position={[(p.s + p.e) / 2, (p.y0 + p.y1) / 2, 0]} castShadow receiveShadow onClick={pick(w.id, onSelect)}>
+        <mesh key={i} position={[(p.s + p.e) / 2, (p.y0 + p.y1) / 2, 0]} castShadow receiveShadow={!house} onClick={pick(w.id, onSelect)}>
           <boxGeometry args={[Math.max(0.001, p.e - p.s), Math.max(0.001, p.y1 - p.y0), Math.max(0.05, w.thickness)]} />
-          {real && !sel ? (
-            w.scope === 'house' ? <PlasterMat L={p.e - p.s} H={p.y1 - p.y0} /> : <StoneWallMat L={p.e - p.s} H={p.y1 - p.y0} />
+          {house ? (
+            <HouseMat sel={sel} />
+          ) : real && !sel ? (
+            <StoneWallMat L={p.e - p.s} H={p.y1 - p.y0} />
           ) : (
             <meshStandardMaterial color={sel ? '#2f5d4a' : color} emissive={sel ? '#2f5d4a' : '#000000'} emissiveIntensity={sel ? 0.3 : 0} roughness={0.9} />
           )}
@@ -151,44 +176,27 @@ function WallMesh({ w, openings, selected, onSelect }: { w: Wall; openings: Open
       ))}
       {openings
         .filter((o) => o.wallId === w.id)
-        .map((o) =>
-          real && selected !== o.id ? (
+        .map((o) => {
+          const isSel = selected === o.id
+          const entry = o.type !== 'window'
+          return (
             <group key={o.id} position={[o.offset + o.width / 2, o.sill + o.height / 2, 0]} onClick={pick(o.id, onSelect)}>
               <mesh>
-                <boxGeometry args={[o.width, o.height, o.type === 'window' ? 0.02 : 0.05]} />
-                {o.type === 'window' ? <GlassMat /> : o.type === 'gate' ? <meshStandardMaterial color="#2f3335" metalness={0.6} roughness={0.4} /> : <DoorMat w={o.width} h={o.height} />}
+                <boxGeometry args={[o.width, o.height, Math.max(0.05, w.thickness * 0.4)]} />
+                <meshStandardMaterial color={isSel ? '#2f5d4a' : entry ? ENTRY : '#a9c6d3'} transparent opacity={entry ? 0.85 : 0.55} roughness={0.3} />
               </mesh>
-              <OpeningFrame w={o.width} h={o.height} depth={Math.max(0.08, w.thickness * 0.5)} type={o.type} />
+              {/* סף כניסה: פס על הקרקע מול דלת, כדי שיראו מאיפה נכנסים ויוצאים */}
+              {entry && o.sill < 0.1 && (
+                <mesh position={[0, -o.height / 2 + 0.01, w.thickness / 2 + 0.45]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[o.width, 0.9]} />
+                  <meshBasicMaterial color={ENTRY} transparent opacity={0.35} depthWrite={false} />
+                </mesh>
+              )}
             </group>
-          ) : (
-            <mesh key={o.id} position={[o.offset + o.width / 2, o.sill + o.height / 2, 0]} onClick={pick(o.id, onSelect)}>
-              <boxGeometry args={[o.width, o.height, o.type === 'window' ? 0.03 : 0.05]} />
-              <meshStandardMaterial
-                color={selected === o.id ? '#2f5d4a' : o.type === 'window' ? '#9fd0e0' : o.type === 'gate' ? '#6d5a86' : '#7a5a3a'}
-                transparent={o.type === 'window'}
-                opacity={o.type === 'window' ? 0.45 : 1}
-                roughness={0.3}
-              />
-            </mesh>
-          ),
-        )}
+          )
+        })}
     </group>
   )
-}
-
-function DoorMat({ w, h }: { w: number; h: number }) {
-  const set = useMemo(() => {
-    const b = woodPBR()
-    const cl = (t: THREE.Texture) => {
-      const n = t.clone()
-      n.repeat.set(Math.max(0.3, w / 1.2), Math.max(0.3, h / 1.2))
-      n.rotation = Math.PI / 2
-      n.needsUpdate = true
-      return n
-    }
-    return { map: cl(b.map), normalMap: cl(b.normalMap) }
-  }, [w, h])
-  return <meshStandardMaterial map={set.map} normalMap={set.normalMap} roughness={0.55} />
 }
 
 function SurfaceMesh({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
@@ -217,7 +225,7 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
   )
 }
 
-function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season }) {
+function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
   const finish = useModelFinish()
   const real = finish === 'detailed'
   const elements = useMemo(() => {
@@ -234,10 +242,29 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
     let minL = 0
     for (const e of elements) if (e.kind === 'surface' || e.kind === 'object' || e.kind === 'line') minL = Math.min(minL, e.level)
     const b = boundsOf(elements)
-    if (!b) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0 }
+    if (!b) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0, siteL: 0 }
     const { minX, minY, maxX, maxY } = b
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL }
+    // מדרגות שיורדות מתחת לגינה (אל הרחוב): הקרקע יורדת למפלס התחתון, והמגרש מוצג כגוש
+    let siteL = minL
+    for (const e of elements) if (e.kind === 'surface' && e.stairs) siteL = Math.min(siteL, e.stairs.bottom)
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL, siteL }
   }, [elements])
+  const plinth = useMemo(() => {
+    if (bounds.siteL > bounds.minL - 0.3) return null
+    const st0 = project.permit?.structure
+    const k = project.permit?.scale.metersPerPt
+    const b = boundsOf(elements)
+    const plot = st0?.plot?.length && k ? st0.plot.map((v) => ({ x: v.x * k, y: v.y * k })) : b ? [{ x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY }, { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY }] : null
+    if (!plot) return null
+    const cuts = elements.filter((e): e is Surface => e.kind === 'surface' && Boolean(e.stairs) && Boolean(e.poly)).map((e) => e.poly!)
+    return { plot, cuts }
+  }, [bounds, elements, project.permit])
+  const groundY = (plinth ? bounds.siteL : bounds.minL) - 0.06
+  // הגינה במרכז הבמה: המצלמה מכוונת למרכז המשטחים והפריטים, לא למרכז הבית
+  const gardenC = useMemo(() => {
+    const g = boundsOf(elements.filter((e) => e.kind === 'surface' || e.kind === 'object' || e.kind === 'line'))
+    return g ? { x: (g.minX + g.maxX) / 2, y: (g.minY + g.maxY) / 2 } : { x: bounds.cx, y: bounds.cy }
+  }, [elements, bounds])
   const openings = elements.filter((e): e is Opening => e.kind === 'opening')
   // כשנבחר קיר או פתח בקומת הקרקע, הקומות העליונות והגג מוסתרים כדי שיראו אותו
   const selEl = elements.find((e) => e.id === selected)
@@ -269,16 +296,17 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
       )}
       {real && <Atmosphere center={center} size={bounds.size} sunDir={sunDir} />}
       {real ? (
-        <NatureGround center={center} size={bounds.size} y={bounds.minL - 0.06} onClick={() => onSelect(null)} />
+        <NatureGround center={center} size={bounds.size} y={groundY} onClick={() => onSelect(null)} />
       ) : (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, bounds.minL - 0.06, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, groundY, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
             <planeGeometry args={[bounds.size * 4, bounds.size * 4]} />
             <meshStandardMaterial color="#dfe3dc" roughness={1} />
           </mesh>
-          <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, bounds.minL - 0.05, bounds.cy]} />
+          <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, groundY + 0.01, bounds.cy]} />
         </>
       )}
+      {plinth && <SitePlinth plot={plinth.plot} cuts={plinth.cuts} top={bounds.minL - 0.06} bottom={groundY} onClick={() => onSelect(null)} />}
       {real && <GrassField surfaces={surfaces} />}
       {real && layer === 'none' && !showDims && <PostFX />}
       {g && climate.values && <HeatLayer g={g} values={climate.values} ramp={climate.ramp} max={climate.max} opacity={layer === 'sun' ? 0.72 : 0.78} />}
@@ -290,7 +318,7 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
         e.kind === 'wall' ? (
           <WallMesh key={e.id} w={e} openings={openings} selected={selected} onSelect={onSelect} />
         ) : e.kind === 'surface' ? (
-          e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
+          e.stairs ? <StairSurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'fence' ? (
           <FenceMesh key={e.id} f={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'object' ? (
@@ -303,8 +331,8 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
       )}
       {project.building && footprints.length > 0 && !groundSel && <BuildingMass footprints={footprints} b={project.building} />}
       {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
-      {showDims && <DimLabels elements={elements} k={Math.max(0.38, bounds.size * 0.024)} />}
-      {showDims && st && mpp > 0 &&
+      {showDims && <DimLabels elements={elements} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} />}
+      {showDims && view.id !== 'top' && st && mpp > 0 &&
         st.levels.slice(0, 60).map((l, i) => {
           const x = l.at.x * mpp
           const y = l.at.y * mpp
@@ -313,34 +341,52 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
           return txt ? <Label3D key={`lv${i}`} text={txt} position={[x, levelAt(x, y) + 0.8, y]} size={Math.max(0.36, bounds.size * 0.022)} color="#48546b" /> : null
         })}
       <NorthArrow deg={project.north || 0} at={{ x: bounds.minX - 2, y: bounds.minY - 2 }} size={Math.max(1.2, bounds.size * 0.05)} />
-      <Controls target={[bounds.cx, 0, bounds.cy]} dist={bounds.size * 1.1} focus={focus} />
+      <Controls target={[gardenC.x, 0, gardenC.y]} dist={bounds.size * 1.1} focus={focus} view={view} />
     </>
   )
 }
 
-// תוויות מידה: אורך קירות וגדרות, שטח משטחים, כל אחת עם התווית שלה
-function DimLabels({ elements, k }: { elements: Element[]; k: number }) {
+// תוויות מידה: אורך, רוחב, שטח וגובה. במבט על: תוויות קצרות כמו בשרטוט, בלי תגיות ובלי חפיפה
+function DimLabels({ elements, k, compact }: { elements: Element[]; k: number; compact?: boolean }) {
+  const tag = (l: Element['label']) => (compact ? '' : ` · ${LABEL_TEXT[l]}`)
+  const placed: { x: number; y: number }[] = []
+  // בלי חפיפה: תווית שקרובה מדי לתווית קודמת לא מוצגת
+  const free = (x: number, y: number) => {
+    if (placed.some((p) => Math.abs(p.x - x) < k * 7 && Math.abs(p.y - y) < k * 2.2)) return false
+    placed.push({ x, y })
+    return true
+  }
+  const ordered = [...elements].sort((a, b) => (b.kind === 'surface' ? surfaceArea(b as Surface) : 0) - (a.kind === 'surface' ? surfaceArea(a as Surface) : 0))
   return (
     <>
-      {elements.map((e) => {
+      {ordered.map((e) => {
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          if (L < 2.5 || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
-          return <Label3D key={e.id} text={`${fmtNum(L)} מ' · ${LABEL_TEXT[e.label]}`} position={[(e.x1 + e.x2) / 2, e.height + k, (e.y1 + e.y2) / 2]} size={k} />
+          if (L < (compact ? 3.5 : 2.5) || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
+          const x = (e.x1 + e.x2) / 2
+          const y = (e.y1 + e.y2) / 2
+          if (compact && !free(x, y)) return null
+          return <Label3D key={e.id} text={`${fmtNum(L)} מ' · גובה ${fmtNum(e.height)}${tag(e.label)}`} position={[x, e.height + k, y]} size={k} />
         }
         if (e.kind === 'surface') {
+          const A = surfaceArea(e)
+          if (compact && A < 4) return null
           const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          return <Label3D key={e.id} text={`${fmtNum(surfaceArea(e))} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} מ' · ${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)} · ${LABEL_TEXT[e.label]}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
+          if (compact && !free(c.x, c.y)) return null
+          const lvl = `${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)}`
+          return <Label3D key={e.id} text={compact ? `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} · ${lvl}` : `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} מ' · ${lvl}${tag(e.label)}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
         }
         if (e.kind === 'object') {
           if (Math.max(e.w, e.d) < 1.5) return null
-          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)} · ${LABEL_TEXT[e.label]}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
+          if (compact && !free(e.x, e.y)) return null
+          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)} · גובה ${fmtNum(e.h)}${tag(e.label)}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
         }
         if (e.kind === 'line') {
           const L = polyLength(e.pts)
           if (L < 2) return null
           const m = e.pts[Math.floor(e.pts.length / 2)]
-          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L)} מ' · ${LABEL_TEXT[e.label]}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
+          if (compact && !free(m.x, m.y)) return null
+          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L)} מ'${e.type === 'path' ? ` × ${fmtNum(e.width)}` : ` · גובה ${fmtNum(e.height)}`}${tag(e.label)}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
         }
         return null
       })}
@@ -408,6 +454,11 @@ export default function ModelTab() {
   const [showDims, setShowDims] = useState(false)
   const [finish, setFinish] = useFinish<ModelFinish>('model', 'detailed')
   const [focusKey, setFocusKey] = useState(0)
+  const [view, setView] = useState<{ id: ViewPreset; key: number }>({ id: 'bird', key: 0 })
+  const pickView = (id: ViewPreset) => {
+    setView((v) => ({ id, key: v.key + 1 }))
+    if (id === 'top') setShowDims(true)
+  }
   const climateState = useClimateState()
   const climate = useClimateData(project, variant.elements, climateState.st)
   const glRef = useRef<THREE.WebGLRenderer | null>(null)
@@ -465,13 +516,20 @@ export default function ModelTab() {
       <div className="model-box" data-testid="model-canvas">
         <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
-            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} />
+            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
             <AutoSnapshot projectId={project.id} version={`${variant.id}:${variant.elements.length}:${finish}:${project.updatedAt}`} enabled={climateState.st.layer === 'none' && !selId && !showDims} />
           </ModelFinishCtx.Provider>
         </Canvas>
         <div className="model-tools">
           <IconBtn icon="dims" label="הצגת מידות" pressed={showDims} onClick={() => setShowDims((v) => !v)} />
           <IconBtn icon="camera" label="שמירת תמונה" onClick={snapshot} testId="model-snapshot" />
+          <span className="tool-group" role="radiogroup" aria-label="מבט">
+            {VIEW_PRESETS.map((v) => (
+              <button key={v.id} type="button" role="radio" aria-checked={view.id === v.id} className={`btn small ${view.id === v.id ? 'active' : ''}`} onClick={() => pickView(v.id)} title={v.d}>
+                {v.t}
+              </button>
+            ))}
+          </span>
           <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
             {MODEL_FINISH.map((f) => (
               <button key={f.id} type="button" role="radio" aria-checked={finish === f.id} className={`btn small ${finish === f.id ? 'active' : ''}`} onClick={() => setFinish(f.id)} title={f.d}>

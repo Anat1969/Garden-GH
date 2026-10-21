@@ -12,18 +12,21 @@ export interface ProjectCtx {
 
 export const useProject = () => useOutletContext<ProjectCtx>()
 
-// סדר העבודה: כל לשונית היא שלב ממוספר, עם סימון "הושלם" לפי מצב הפרויקט
-const TABS: { to: string; t: string; end?: boolean; done: (p: Project, v: Variant) => boolean }[] = [
-  { to: '', t: 'פרטים ודרישות', end: true, done: (p) => Boolean(p.address.trim()) },
-  { to: 'permit', t: 'היתר', done: (p) => Boolean(p.permit && p.permit.pageCount >= 0 && p.permit.fileName) },
-  { to: 'dims', t: 'מידות', done: (p) => hasBasis(p) },
-  { to: 'design', t: 'תכנון הגינה', done: (_p, v) => v.elements.some((e) => e.kind === 'surface' || e.kind === 'object') },
-  { to: 'plan', t: 'תוכנית ועריכה', done: (_p, v) => v.elements.length > 0 && v.elements.every((e) => e.approved || e.kind === 'sketch') },
-  { to: 'model', t: 'מודל תלת-ממדי', done: (_p, v) => v.elements.length > 0 },
-  { to: 'bom', t: 'כתב כמויות', done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
-  { to: 'phases', t: 'שלבים ותקציב', done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
-  { to: 'variants', t: 'חלופות', done: (p) => p.variants.length > 1 },
+// סדר העבודה: שישה שלבים, כמו בדף הבית. בכל שלב תחנה אחת או יותר (1.1, 1.2...), עם סימון "הושלם"
+export const STAGES = ['פרויקט והיתר', 'תוכנית: קירות ופתחים', 'תכנון הגינה', 'מודל ואקלים', 'כמויות ותקציב', 'הגשה וחלופות']
+const TABS: { to: string; t: string; stage: number; end?: boolean; done: (p: Project, v: Variant) => boolean }[] = [
+  { to: '', t: 'פרטים ודרישות', stage: 0, end: true, done: (p) => Boolean(p.address.trim()) },
+  { to: 'permit', t: 'היתר', stage: 0, done: (p) => Boolean(p.permit && p.permit.pageCount >= 0 && p.permit.fileName) },
+  { to: 'dims', t: 'מידות', stage: 0, done: (p) => hasBasis(p) },
+  { to: 'plan', t: 'תוכנית ועריכה', stage: 1, done: (_p, v) => v.elements.length > 0 && v.elements.every((e) => e.approved || e.kind === 'sketch') },
+  { to: 'design', t: 'תכנון הגינה', stage: 2, done: (_p, v) => v.elements.some((e) => e.kind === 'surface' || e.kind === 'object') },
+  { to: 'model', t: 'מודל תלת-ממדי ואקלים', stage: 3, done: (_p, v) => v.elements.length > 0 },
+  { to: 'bom', t: 'כתב כמויות', stage: 4, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
+  { to: 'phases', t: 'שלבים ותקציב', stage: 4, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
+  { to: 'sheet', t: 'גליון להדפסה', stage: 5, done: (p) => Boolean(p.sheet?.poem || p.sheet?.post) },
+  { to: 'variants', t: 'חלופות', stage: 5, done: (p) => p.variants.length > 1 },
 ]
+const tabNo = (t: (typeof TABS)[number]) => `${t.stage + 1}.${TABS.filter((x) => x.stage === t.stage).indexOf(t) + 1}`
 
 // מעבר לשלב הקודם והבא בתחתית כל לשונית
 function StepNav() {
@@ -43,7 +46,7 @@ function StepNav() {
       )}
       {next && (
         <Link className="btn primary" to={next.to} aria-label="מעבר לשלב הבא">
-          השלב הבא: {String(i + 2).padStart(2, '0')} {next.t}
+          השלב הבא: {tabNo(next)} {next.t}
         </Link>
       )}
     </nav>
@@ -74,7 +77,7 @@ export default function ProjectLayout() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <PrintHead project={project} subject={TABS.find((t) => t.to === (loc.pathname.split('/')[3] ?? ''))?.t ?? ''} />
+      {(loc.pathname.split('/')[3] ?? '') !== 'sheet' && <PrintHead project={project} subject={TABS.find((t) => t.to === (loc.pathname.split('/')[3] ?? ''))?.t ?? ''} />}
       <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'end' }}>
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow">
@@ -88,9 +91,6 @@ export default function ProjectLayout() {
           </h1>
         </div>
         <div className="row" style={{ gap: 8, alignItems: 'end' }}>
-        <Link className="btn" to={`/p/${project.id}/sheet`} data-testid="open-sheet">
-          גליון להדפסה
-        </Link>
         <label className="field" style={{ minWidth: 180 }}>
           <span>חלופה פעילה</span>
           <select
@@ -107,14 +107,23 @@ export default function ProjectLayout() {
         </label>
         </div>
       </div>
-      <nav className="tabs no-print" aria-label="לשוניות פרויקט">
-        {TABS.map((t, i) => (
-          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `tab step-tab ${isActive ? 'active' : ''} ${t.done(project, variant) ? 'done' : ''}`}>
-            <span className="step-n" aria-hidden="true">
-              {String(i + 1).padStart(2, '0')}
+      <nav className="tabs stage-tabs no-print" aria-label="לשוניות פרויקט">
+        {STAGES.map((name, si) => (
+          <div key={name} className="stage-group" role="group" aria-label={`שלב ${si + 1}: ${name}`}>
+            <span className="stage-name">
+              <b>{si + 1}</b> {name}
             </span>
-            {t.t}
-          </NavLink>
+            <div className="stage-row">
+              {TABS.filter((t) => t.stage === si).map((t) => (
+                <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => `tab step-tab ${isActive ? 'active' : ''} ${t.done(project, variant) ? 'done' : ''}`}>
+                  <span className="step-n" aria-hidden="true">
+                    {tabNo(t)}
+                  </span>
+                  {t.t}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
       <Outlet context={{ project, variant } satisfies ProjectCtx} />

@@ -194,7 +194,7 @@ const planDir = (az: number, north: number) => {
   return { x: Math.sin(a), y: -Math.cos(a) }
 }
 
-export function renderView(s: Scene3D, opts: { width: number; height: number; view: 'iso' | 'persp'; callouts?: CalloutIn[] }): RenderResult {
+export function renderView(s: Scene3D, opts: { width: number; height: number; view: 'iso' | 'persp'; callouts?: CalloutIn[]; az?: number; el?: number; zoom?: number }): RenderResult {
   const { scene, envelope, glassMeshes, meshes } = buildScene(s)
   const box = sceneBox(s)
   const c = box.getCenter(new THREE.Vector3())
@@ -221,6 +221,8 @@ export function renderView(s: Scene3D, opts: { width: number; height: number; vi
   const south = planDir(180, s.north)
   const east = planDir(90, s.north)
   const hv = new THREE.Vector3(south.x + east.x * 0.75, 0, south.y + east.y * 0.75).normalize()
+  // סיבוב המבט סביב המבנה לפי בחירת המשתמש
+  if (opts.az) hv.applyAxisAngle(new THREE.Vector3(0, 1, 0), (-opts.az * Math.PI) / 180)
   const aspect = opts.width / opts.height
   let camera: THREE.Camera
   if (opts.view === 'iso') {
@@ -259,7 +261,7 @@ export function renderView(s: Scene3D, opts: { width: number; height: number; vi
     camera = cam
   } else {
     const cam = new THREE.PerspectiveCamera(30, aspect, 0.1, 1000)
-    const dir = new THREE.Vector3(hv.x, Math.tan((20 * Math.PI) / 180), hv.z).normalize()
+    const dir = new THREE.Vector3(hv.x, Math.tan(((opts.el ?? 20) * Math.PI) / 180), hv.z).normalize()
     // ההדמיה הראשית ממוסגרת על המבנה ועל הגינה הקרובה אליו, לא על כל המגרש
     const near = new THREE.Box3()
     for (const v of s.volumes) for (const p of v.poly) near.expandByPoint(new THREE.Vector3(p.x, v.z1, p.y)).expandByPoint(new THREE.Vector3(p.x, 0, p.y))
@@ -269,7 +271,7 @@ export function renderView(s: Scene3D, opts: { width: number; height: number; vi
     const target = nc.clone().setY(near.getSize(new THREE.Vector3()).y * 0.32)
     const radius = near.getBoundingSphere(new THREE.Sphere()).radius
     const fovH = 2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * aspect)
-    const dist = (radius * 0.92) / Math.sin(Math.min((cam.fov * Math.PI) / 360, fovH / 2))
+    const dist = (radius * 0.92) / (opts.zoom ?? 1) / Math.sin(Math.min((cam.fov * Math.PI) / 360, fovH / 2))
     cam.position.copy(target.clone().add(dir.multiplyScalar(dist)))
     cam.lookAt(target)
     cam.updateMatrixWorld()

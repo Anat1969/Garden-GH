@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './styles.css'
-import { addProject, getState, initAuth, mergeDuplicateProjects } from './lib/store'
+import { addProject, deleteProject, getState, initAuth, mergeDuplicateProjects } from './lib/store'
 import { buildShaniProject, SHANI_FLAG } from './data/shaniProject'
 
 void initAuth()
@@ -11,7 +11,11 @@ void initAuth()
 // הפרויקט של שני נוצר פעם אחת בכל מכשיר, כדוגמה שאפשר להתחיל לתכנן עליה
 try {
   if (!localStorage.getItem(SHANI_FLAG)) {
-    if (!getState().projects.some((p) => p.name === 'הבית של שני')) addProject(buildShaniProject())
+    // גרסה 2 של הקריאה: מחליפה את הדוגמה הקודמת, אם לא נערכה ידנית
+    const old = getState().projects.find((p) => p.name === 'הבית של שני')
+    const edited = old && old.variants.some((v) => v.elements.some((e) => !e.source.includes('קריאת מבנה ידנית') && !e.source.includes('קריאה ידנית')))
+    if (old && !edited) void deleteProject(old.id)
+    if (!old || !edited) addProject(buildShaniProject())
     localStorage.setItem(SHANI_FLAG, '1')
   }
 } catch {

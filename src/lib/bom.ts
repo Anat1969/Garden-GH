@@ -1,4 +1,5 @@
 import type { Element, Label, PriceItem, Project, Unit, Variant } from './types'
+import { stairPlan } from './stairs'
 import { LINES, MATERIALS, MATERIAL_TEXT, OBJECTS } from './garden'
 import { polyArea } from './geom'
 
@@ -151,7 +152,7 @@ export function elementName(e: Element, idx?: number): string {
     case 'opening':
       return (e.type === 'door' ? 'דלת' : e.type === 'gate' ? 'שער' : 'חלון') + n
     case 'surface':
-      return MATERIAL_TEXT[e.material] + n
+      return (e.stairs ? 'מדרגות' : MATERIAL_TEXT[e.material]) + n
     case 'fence':
       return (e.boundary ? 'גדר גבול מגרש' : 'גדר') + n
     case 'object':
@@ -192,6 +193,18 @@ function quantities(e: Element): Qty[] {
     const area = surfaceArea(e)
     const A = `שטח ${n2(area)} מ"ר`
     const dig = (d: number, why: string): Qty => ({ category: 'earthwork', qty: area * d, how: `${A} × עומק ${n2(d)} מ' (${why})` })
+    // מדרגות: גוף בטון לפי שטח התוכנית, וחיפוי לשלחים ולרומים
+    const sp = e.stairs ? stairPlan(e) : null
+    if (sp) {
+      const width = area / Math.max(0.01, sp.tread * sp.count)
+      const clad = area + sp.count * sp.riser * width
+      const warn = 'מדרגות, הפרשי מפלסים וקירות תמך: דורש מהנדס מוסמך'
+      return [
+        dig(0.3, 'חפירה ליסוד המדרגות'),
+        { category: 'concrete', qty: area, how: `${A}, ${sp.count} מדרגות ברום ${n2(sp.riser * 100)} ס"מ (גוף בטון)`, warning: warn },
+        { category: MATERIALS[e.material].category, qty: clad, how: `שלחים ${n2(area)} מ"ר + רומים ${sp.count} × ${n2(sp.riser)} × ${n2(width)} מ'` },
+      ]
+    }
     switch (e.material) {
       case 'paving':
       case 'tiles':
