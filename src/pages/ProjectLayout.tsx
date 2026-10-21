@@ -20,6 +20,7 @@ const TABS: { to: string; t: string; stage: number; end?: boolean; done: (p: Pro
   { to: 'permit', t: 'היתר', stage: 0, done: (p) => Boolean(p.permit && p.permit.pageCount >= 0 && p.permit.fileName) },
   { to: 'dims', t: 'מידות', stage: 0, done: (p) => hasBasis(p) },
   { to: 'plan', t: 'תוכנית ועריכה', stage: 1, done: (_p, v) => v.elements.length > 0 && v.elements.every((e) => e.approved || e.kind === 'sketch') },
+  { to: 'brief', t: 'אתגרים והצעה', stage: 2, done: (p) => Boolean(p.brief) },
   { to: 'design', t: 'תכנון הגינה', stage: 2, done: (_p, v) => v.elements.some((e) => e.kind === 'surface' || e.kind === 'object') },
   { to: 'model', t: 'מודל תלת-ממדי ואקלים', stage: 3, done: (_p, v) => v.elements.length > 0 },
   { to: 'bom', t: 'כתב כמויות', stage: 4, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },

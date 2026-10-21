@@ -5,6 +5,7 @@ import { updateProject, updateVariant } from '../lib/store'
 import { CheckGroup, Field, NumField, Tag, toast } from '../components/ui'
 import { PageIntro } from '../components/PageIntro'
 import { MapLocator } from '../components/MapLocator'
+import { SiteDataCard } from '../components/SiteDataCard'
 import { IconBtn } from '../components/EditIcons'
 import { NO_BASIS, fmtNum, hasBasis } from '../lib/bom'
 import { FUNCTIONS, defaultZones } from '../lib/designer'
@@ -43,7 +44,9 @@ export default function Overview() {
         ? { to: 'dims', t: 'קביעת קנה מידה' }
         : pending
           ? { to: 'plan', t: `בדיקת ${pending} אלמנטים שלא אושרו` }
-          : surfaces === 0
+          : !project.brief
+            ? { to: 'brief', t: 'אתגרי הגינה והצעה תכנונית' }
+            : surfaces === 0
             ? { to: 'design', t: 'תכנון הגינה' }
             : { to: 'bom', t: 'כתב כמויות' }
 
@@ -158,13 +161,15 @@ export default function Overview() {
           </Field>
         </div>
         <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>
-          נתוני גשם, ניקוז ומי תהום: לא זמינים בשלב זה.
+          גשם, טמפרטורות, רוח וקרקע אופיינית: בנתוני האתר מהמיקום, מתחת למפה. מי תהום: לא זמינים.
           <br />
           ניקוז לבית: דורש מהנדס מוסמך.
         </div>
       </section>
 
       <MapLocator project={project} />
+
+      <SiteDataCard project={project} />
 
       <section className="card">
         <h3 className="h-section" style={{ margin: '0 0 4px' }}>

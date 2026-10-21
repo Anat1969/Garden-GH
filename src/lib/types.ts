@@ -1,4 +1,5 @@
 import type { LineType, ObjectType, SurfaceMaterial } from './garden'
+import type { SiteData } from './siteData'
 export type { LineType, ObjectType, SurfaceMaterial } from './garden'
 export { MATERIAL_COLOR, MATERIAL_TEXT } from './garden'
 
@@ -341,6 +342,9 @@ export interface Project {
   createdAt: string
   updatedAt: string
   location?: ProjectLocation // מיקום על המפה: מכתובת, מדקירה או מקואורדינטות
+  site?: SiteData // נתוני האתר שחולצו מהמיקום: גובה, אקלים, מים, רוח, קרקע
+  brief?: { at: string; text: string } // תיאור האתגרים וההצעה התכנונית, כפי שנשמר
+  processNotes?: string // הערות המתכננת לתמונת המצב של תהליך העבודה
 }
 
 export interface PriceItem {
