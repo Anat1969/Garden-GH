@@ -135,12 +135,14 @@ const STRUCTURE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["kind", "label", "polygon", "level_abs"],
+        required: ["kind", "label", "polygon", "level_abs", "level_to_abs", "descends_toward"],
         properties: {
-          kind: { type: "string", enum: ["lawn", "paving", "planting", "deck", "gravel", "path", "stairs", "parking", "pool", "other"] },
+          kind: { type: "string", enum: ["lawn", "paving", "planting", "deck", "gravel", "path", "stairs", "ramp", "parking", "pool", "other"] },
           label: { type: "string" },
           polygon: POLY,
           level_abs: { type: "number" },
+          level_to_abs: { type: "number" },
+          descends_toward: { type: "string", enum: ["up", "down", "left", "right", "none"] },
         },
       },
     },
@@ -216,13 +218,15 @@ kind: floor_plan (a floor plan of a storey), development_plan (תכנית פית
 floor: for floor plans the storey in Hebrew as written (קרקע, א, ב, גג, מרתף), else empty. scale_den: the N of 1:N in the title, 0 if none. title: the title as written.
 The box must contain the whole drawing including its dimension lines and title. Do not merge two drawings into one box. Skip drawings cut by the image edge so that less than half is visible.`;
 
-const STRUCTURE_SYSTEM = `You are an architect and landscape architect reading the ground-floor plan or site-development plan of an Israeli building permit, in order to build a 3D model of the house and garden. Coordinates are pixels of the image you receive (origin top-left).
+const STRUCTURE_SYSTEM = `You read this drawing the way an architect, a draftsman, a 3D modeller and an AutoCAD, Revit and SketchUp expert would: you translate the 2D drawing into the volume of the building and the site. Before answering, understand the logic of the whole: where the street is, how one enters (gates, paths, the main entrance door), how levels step between the street, the yard and the floor (stairs, ramps, retaining walls), which way each part faces, and how the masses relate. Then read the details: every wall line, opening, step, level mark and dimension.
+You are reading the ground-floor plan or site-development plan of an Israeli building permit, in order to build a 3D model of the house and garden. Coordinates are pixels of the image you receive (origin top-left).
 Return:
 - north_angle_deg: direction the north arrow points, in degrees clockwise from straight up in the image (0 = north is up, 90 = north is to the right). 0 if there is no arrow.
 - units: each dwelling unit or building mass at ground level. footprint = polygon along the OUTER face of its exterior walls, vertices in order, following steps and corners; approximate curves with several points. Do not include terraces, pergolas, dashed outlines of floors above, or fill areas (מילוי). wall_thickness_cm from the drawing (usually 20-30). floor_level_rel/abs: the ±0.00 level of that unit and its absolute value (e.g. 0 and 699.00).
 - openings: doors, sliding doors and windows in the exterior walls of the units, as the segment along the wall between the jambs.
 - plot: the plot boundary (קו מגרש, גבול מגרש) polygon. Empty if not shown.
-- zones: garden and yard areas outside the house: lawn (דשא), paving (hatched or tiled ריצוף, אבן), planting beds (גינון, ערוגה), deck, gravel, path, stairs, parking, pool. polygon in order. level_abs: the absolute level written inside or at the zone, 0 if none. label: text written in the zone.
+- zones: garden and yard areas outside the house: lawn (דשא), paving (hatched or tiled ריצוף, אבן), planting beds (גינון, ערוגה), deck, gravel, path, stairs, ramp (רמפה), parking, pool. polygon in order. level_abs: the absolute level written inside or at the zone, 0 if none. label: text written in the zone.
+  Stairs and ramps: a band of parallel lines (treads) with an arrow. The arrow points UP the stairs (often marked עולה); the lower end is where the arrow starts. level_abs = the level at the TOP of the flight, level_to_abs = the level at the BOTTOM (read the level marks at both ends: the street, a yard, a storage room), 0 if unknown. descends_toward = the image direction in which the flight goes down (up, down, left, right). Every stair drawn in the plan must be returned as its own zone, including short flights to a storage room or a basement. For other zones level_to_abs = 0 and descends_toward = none.
 - levels: every level mark (cross or triangle with numbers): text as written, abs (e.g. 698.85, 0 if not written), rel and has_rel when a relative value like ±0.00 or -0.22 is written, and x,y of the mark.
 - trees: existing or proposed trees, palms and large shrubs with centre and radius in pixels.
 - retaining_walls: walls drawn along the plot or between garden levels (קיר תומך, קיר פיתוח, גדר), as segments with their label.

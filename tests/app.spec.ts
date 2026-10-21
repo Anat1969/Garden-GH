@@ -170,11 +170,13 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
 
   // חלופות
   await page.getByRole('link', { name: 'חלופות' }).click()
-  await page.getByLabel('שם החלופה').fill('חלופה חסכונית')
+  await page.locator('form.card').getByLabel('שם החלופה').fill('חלופה חסכונית')
   await page.getByRole('button', { name: 'יצירת חלופה' }).click()
-  await expect(page.locator('select').first()).toHaveValue(/.+/)
-  await expect(page.locator('span.lbl', { hasText: 'פעילה' })).toBeVisible()
-  await page.getByRole('button', { name: 'הפעלה' }).click()
+  await expect(page.getByTestId('variant-switch')).toContainText('חלופה 2')
+  await expect(page.locator('span.lbl', { hasText: 'פעילה' }).first()).toBeVisible()
+  // הפעלה בלחיצה על התוכנית של החלופה הראשונה
+  await page.locator('.variant-card').first().getByRole('button', { name: /הפעלת חלופה 1/ }).click()
+  await expect(page.getByTestId('variant-switch')).toContainText('חלופה 1')
   await page.screenshot({ path: 'shots/09-variants.png', fullPage: true })
 
   // סקירה

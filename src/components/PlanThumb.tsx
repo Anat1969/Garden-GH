@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import type { Element, Project } from '../lib/types'
+import type { Element, Project, Variant } from '../lib/types'
+import { stairPlan } from '../lib/stairs'
 import { LINES, MATERIALS, OBJECTS } from '../lib/garden'
 import { boundsOf } from '../lib/elementGeom'
 import { activeVariant } from '../lib/store'
@@ -8,8 +9,8 @@ import { unitFootprints } from './model3d'
 // תוכנית מוקטנת של הבית והגינה לכרטיס פרויקט: משטחים בצבעי החומר, קירות, גדרות ופריטים
 const ORDER: Record<Element['kind'], number> = { surface: 0, line: 1, sketch: 2, fence: 3, wall: 4, opening: 5, object: 6 }
 
-export function PlanThumb({ project }: { project: Project }) {
-  const els = activeVariant(project).elements
+export function PlanThumb({ project, variant, onClick, label, hi }: { project: Project; variant?: Variant; onClick?: () => void; label?: string; hi?: string[] }) {
+  const els = (variant ?? activeVariant(project)).elements
   const fps = useMemo(() => unitFootprints(project), [project])
   const b = useMemo(() => {
     const bb = boundsOf(els)
@@ -20,7 +21,7 @@ export function PlanThumb({ project }: { project: Project }) {
 
   if (!b)
     return (
-      <div className="plan-thumb empty">
+      <div className="plan-thumb empty" onClick={onClick}>
         <span>{project.permit ? 'היתר נטען, עוד אין תוכנית' : 'עוד אין תוכנית'}</span>
       </div>
     )
@@ -28,8 +29,8 @@ export function PlanThumb({ project }: { project: Project }) {
   const sorted = [...els].sort((a, c) => ORDER[a.kind] - ORDER[c.kind])
   const north = project.north || 0
   return (
-    <div className="plan-thumb">
-      <svg viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`תוכנית ${project.name}`}>
+    <div className={`plan-thumb ${onClick ? 'clickable' : ''}`} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? label : undefined} onKeyDown={onClick ? (ev) => (ev.key === 'Enter' || ev.key === ' ') && onClick() : undefined}>
+      <svg viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`תוכנית ${project.name}${variant ? `, ${variant.name}` : ''}`}>
         {fps.map((fp, i) => (
           <polygon key={`fp${i}`} points={fp.map((p) => `${p.x},${p.y}`).join(' ')} fill="#f1efe9" stroke="none" />
         ))}
@@ -37,6 +38,16 @@ export function PlanThumb({ project }: { project: Project }) {
           switch (e.kind) {
             case 'surface': {
               const fill = e.color || MATERIALS[e.material].color
+              const sp = e.stairs ? stairPlan(e) : null
+              if (sp)
+                return (
+                  <g key={e.id}>
+                    <polygon points={e.poly!.map((p) => `${p.x},${p.y}`).join(' ')} fill="#efebe2" stroke="#4a4740" strokeWidth={k * 0.6} />
+                    {sp.steps.slice(1).map((st, i) => (
+                      <polygon key={i} points={st.poly.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#4a4740" strokeWidth={k * 0.35} />
+                    ))}
+                  </g>
+                )
               return e.poly ? (
                 <polygon key={e.id} points={e.poly.map((p) => `${p.x},${p.y}`).join(' ')} fill={fill} stroke="rgba(0,0,0,.12)" strokeWidth={k * 0.6} />
               ) : (
@@ -62,6 +73,11 @@ export function PlanThumb({ project }: { project: Project }) {
             default:
               return null
           }
+        })}
+        {hi?.map((id) => {
+          const e = els.find((x) => x.id === id)
+          if (!e || e.kind !== 'surface') return null
+          return e.poly ? <polygon key={`hi${id}`} points={e.poly.map((p) => `${p.x},${p.y}`).join(' ')} fill="#2f5d4a" fillOpacity={0.18} stroke="#2f5d4a" strokeWidth={k * 1.6} /> : null
         })}
       </svg>
       <span className="thumb-north" style={{ transform: `rotate(${north}deg)` }} aria-label="צפון">

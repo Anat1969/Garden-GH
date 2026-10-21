@@ -175,7 +175,7 @@ interface StructureRaw {
   units: { name: string; footprint: Pt[]; wall_thickness_cm: number; floor_level_rel: number; floor_level_abs: number }[]
   openings: { type: PlanStructure['openings'][number]['type']; x1: number; y1: number; x2: number; y2: number }[]
   plot: Pt[]
-  zones: { kind: string; label: string; polygon: Pt[]; level_abs: number }[]
+  zones: { kind: string; label: string; polygon: Pt[]; level_abs: number; level_to_abs?: number; descends_toward?: string }[]
   levels: { text: string; abs: number; rel: number; has_rel: boolean; x: number; y: number }[]
   trees: { x: number; y: number; r: number; kind: 'tree' | 'palm' | 'shrub' }[]
   retaining_walls: { x1: number; y1: number; x2: number; y2: number; label: string }[]
@@ -201,7 +201,12 @@ export async function readStructure(doc: PDFDocumentProxy, d: Drawing): Promise<
     openings: (r.openings ?? []).map((o) => ({ type: o.type, a: P(o.x1, o.y1), b: P(o.x2, o.y2) })),
     plot: poly(r.plot),
     zones: (r.zones ?? [])
-      .map((z) => ({ kind: z.kind, label: z.label, polygon: poly(z.polygon), levelAbs: z.level_abs > 100 ? z.level_abs : null }))
+      .map((z) => {
+        // מדרגות ורמפה: המפלס העליון, התחתון וכיוון הירידה (בתמונה: למעלה = צפון בתוכנית, y כלפי מטה)
+        const down = ({ up: 'N', down: 'S', left: 'W', right: 'E' } as const)[z.descends_toward as 'up' | 'down' | 'left' | 'right']
+        const to = z.level_to_abs && z.level_to_abs > 100 ? z.level_to_abs : undefined
+        return { kind: z.kind === 'ramp' ? 'stairs' : z.kind, label: z.label, polygon: poly(z.polygon), levelAbs: z.level_abs > 100 ? z.level_abs : null, ...(to && down ? { levelToAbs: to, down } : {}) }
+      })
       .filter((z) => z.polygon.length >= 3),
     levels: (r.levels ?? []).map((l) => ({ text: l.text, abs: l.abs > 100 ? l.abs : null, rel: l.has_rel ? l.rel : null, at: P(l.x, l.y) })),
     trees: (r.trees ?? []).map((t) => ({ at: P(t.x, t.y), r: t.r / scale, kind: t.kind })),

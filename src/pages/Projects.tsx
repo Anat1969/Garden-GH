@@ -6,6 +6,7 @@ import { buildShaniProject } from '../data/shaniProject'
 import { Empty, Field, Loading, Rise, toast } from '../components/ui'
 import { DraftDocs, type DraftDoc } from '../components/Documents'
 import { PlanThumb } from '../components/PlanThumb'
+import { projectLastChange } from '../lib/changes'
 import { IconBtn } from '../components/EditIcons'
 import { PageIntro } from '../components/PageIntro'
 import { addDocuments, readableAsPermit } from '../lib/docs'
@@ -65,6 +66,23 @@ function ProjectCard({ p, delay }: { p: Project; delay: number }) {
           </Link>
           <div className="muted" style={{ fontSize: 14 }}>
             {p.address || 'כתובת לא הוזנה'}
+          </div>
+          <div className="muted" style={{ fontSize: 13 }} data-testid="project-last-change">
+            {(() => {
+              const lc = projectLastChange(p)
+              const av = p.variants.findIndex((v) => v.id === p.activeVariantId)
+              return (
+                <>
+                  <b>חלופה {av + 1} מתוך {p.variants.length}</b>: {p.variants[av]?.name}
+                  {lc && (
+                    <>
+                      <br />
+                      שינוי אחרון ב"{lc.variant}": {lc.text}
+                    </>
+                  )}
+                </>
+              )
+            })()}
           </div>
           <div className="muted" style={{ fontSize: 14 }}>
             {p.permit ? `היתר: ${p.permit.fileName}` : 'עוד לא הועלה היתר'}

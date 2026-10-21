@@ -295,6 +295,7 @@ export interface Variant {
   elements: Element[]
   requirements: Requirements
   assignments: Record<string, string>
+  lastChange?: { at: string; text: string } // השינוי התכנוני האחרון
 }
 
 // מסמך מצורף לפרויקט: כל סוג קובץ. הקובץ עצמו נשמר במכשיר (IndexedDB), כאן רק הפרטים

@@ -12,7 +12,7 @@ import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTextur
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
-import { BuildingMass, HouseMat, Label3D, NorthArrow, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
+import { BuildingMass, HouseMat, NorthArrow, FlatText, GroundDim, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { stairPlan } from '../lib/stairs'
 import { LABEL_TEXT } from '../lib/types'
@@ -21,6 +21,7 @@ import { Tag } from '../components/ui'
 import { IconBtn } from '../components/EditIcons'
 import { buildHouse, type BuildResult } from '../lib/buildHouse'
 import { PageIntro } from '../components/PageIntro'
+import { RequirementsSummary } from '../components/VariantContext'
 import { ClimateInsights, ClimatePanel, useClimateData, useClimateState, dirText, type ClimateData, type ClimateLayer } from '../components/ClimatePanel'
 import { HeatLayer, SeatSpots, SunLight, SunPath, WindArrow, WindParticles, sunVector } from '../components/climate3d'
 import { Atmosphere, GrassField, NatureGround, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
@@ -337,7 +338,7 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
       )}
       {project.building && footprints.length > 0 && !groundSel && <BuildingMass footprints={footprints} b={project.building} />}
       {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
-      {showDims && <DimLabels elements={elements} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} />}
+      {(showDims || selected) && <GroundDims elements={showDims ? elements : elements.filter((e) => e.id === selected)} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} selected={selected} onPick={(id) => onSelect(id)} />}
       {showDims && <SideDims elements={elements} k={Math.max(0.38, bounds.size * 0.022)} y={Math.max(0.02, bounds.minL)} />}
       {showDims && view.id !== 'top' && st && mpp > 0 &&
         st.levels.slice(0, 60).map((l, i) => {
@@ -345,7 +346,8 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
           const y = l.at.y * mpp
           const rel = l.rel ?? (l.abs !== null && base !== null ? l.abs - base : null)
           const txt = `${l.abs !== null ? l.abs.toFixed(2) : ''}${rel !== null ? ` (${rel >= 0 ? '+' : ''}${rel.toFixed(2)})` : ''}`
-          return txt ? <Label3D key={`lv${i}`} text={txt} position={[x, levelAt(x, y) + 0.8, y]} size={Math.max(0.36, bounds.size * 0.022)} color="#48546b" /> : null
+          // סימון מפלס כמו בתוכנית: שוכב על הקרקע במקום שסומן בהיתר
+          return txt ? <FlatText key={`lv${i}`} lines={[`מפלס ${txt}`]} at={[x, levelAt(x, y) + 0.06, y]} size={Math.max(0.24, bounds.size * 0.012)} color="#48546b" bg="rgba(255,255,255,0.75)" /> : null
         })}
       <NorthArrow deg={project.north || 0} at={{ x: bounds.minX - 2, y: bounds.minY - 2 }} size={Math.max(1.2, bounds.size * 0.05)} />
       <Controls target={[gardenC.x, 0, gardenC.y]} dist={bounds.size * 1.1} focus={focus} view={view} />
@@ -353,55 +355,108 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
   )
 }
 
-// תוויות מידה: אורך, רוחב, שטח וגובה. במבט על: תוויות קצרות כמו בשרטוט, בלי תגיות ובלי חפיפה
-function DimLabels({ elements, k, compact }: { elements: Element[]; k: number; compact?: boolean }) {
-  const tag = (l: Element['label']) => (compact ? '' : ` · ${LABEL_TEXT[l]}`)
-  const placed: { x: number; y: number }[] = []
-  // בלי חפיפה: תווית שקרובה מדי לתווית קודמת לא מוצגת
-  const free = (x: number, y: number) => {
-    if (placed.some((p) => Math.abs(p.x - x) < k * (compact ? 7 : 10) && Math.abs(p.y - y) < k * (compact ? 2.2 : 3))) return false
-    placed.push({ x, y })
+// מידות על הקרקע, כמו בשרטוט: כל מידה שוכבת ליד מה שהיא מודדת ובקנה המידה של המודל.
+// קיר וגדר: קו מידה מקביל עם שנתות וקווי עזר. משטח: תווית שטח על המשטח עצמו. לחיצה על מידה בוחרת את האלמנט ומדגישה אותו.
+function GroundDims({ elements, k, compact, selected, onPick }: { elements: Element[]; k: number; compact?: boolean; selected: string | null; onPick: (id: string) => void }) {
+  const tag = (l: Element['label']) => LABEL_TEXT[l]
+  const placed: { x: number; y: number; r: number }[] = []
+  // בלי חפיפה: תווית שקרובה מדי לתווית קודמת לא מוצגת (הנבחר תמיד מוצג)
+  const free = (id: string, x: number, y: number, r: number) => {
+    if (id !== selected && placed.some((p) => Math.hypot(p.x - x, p.y - y) < (p.r + r) * 0.9)) return false
+    placed.push({ x, y, r })
     return true
   }
-  const ordered = [...elements].sort((a, b) => (b.kind === 'surface' ? surfaceArea(b as Surface) : 0) - (a.kind === 'surface' ? surfaceArea(a as Surface) : 0))
+  const sz = (v: number) => Math.min(k * 1.7, Math.max(0.42, v))
+  const ordered = [...elements].sort((a, b) => (a.id === selected ? -1 : b.id === selected ? 1 : 0) || (b.kind === 'surface' ? surfaceArea(b as Surface) : 0) - (a.kind === 'surface' ? surfaceArea(a as Surface) : 0))
   return (
-    <>
+    <group>
       {ordered.map((e) => {
+        const sel = e.id === selected
+        const ink = sel ? '#b0522d' : '#3b5d7a'
+        const border = sel ? '#b0522d' : undefined
+        const pick = () => onPick(e.id)
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          // במבט בפרספקטיבה: בלי תוויות לקירות הבית (מידותיו בשרשראות ובמבט על), וקירות קצרים בלי תווית
-          if (!compact && e.kind === 'wall' && e.scope === 'house') return null
-          if (L < 3.5 || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
-          const x = (e.x1 + e.x2) / 2
-          const y = (e.y1 + e.y2) / 2
-          if (!free(x, y)) return null
-          return <Label3D key={e.id} text={`${fmtNum(L)} מ' · גובה ${fmtNum(e.height)}${tag(e.label)}`} position={[x, e.height + k, y]} size={k} />
+          if (!sel && !compact && e.kind === 'wall' && e.scope === 'house') return null
+          if (!sel && (L < 3 || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4))) return null
+          const ang = Math.atan2(e.y2 - e.y1, e.x2 - e.x1)
+          const off = (e.kind === 'wall' ? e.thickness / 2 : 0) + 0.45
+          const nx = -Math.sin(ang) * (off + 0.35)
+          const ny = Math.cos(ang) * (off + 0.35)
+          const x = (e.x1 + e.x2) / 2 + nx
+          const y = (e.y1 + e.y2) / 2 + ny
+          const s = sz(Math.min(L * 0.1, 0.8))
+          if (!free(e.id, x, y, s * 3)) return null
+          return (
+            <group key={e.id}>
+              <GroundDim a={{ x: e.x1, y: e.y1 }} b={{ x: e.x2, y: e.y2 }} y={0.04} off={off} color={ink} />
+              <FlatText lines={[`${fmtNum(L)} מ'`, `גובה ${fmtNum(e.height)} · ${tag(e.label)}`]} at={[x, 0.05, y]} angle={ang} size={s} color={ink} border={border} onClick={pick} />
+            </group>
+          )
         }
         if (e.kind === 'surface') {
           const A = surfaceArea(e)
-          if (A < 4) return null
+          if (!sel && A < 4) return null
           const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          if (!free(c.x, c.y)) return null
+          const top = e.level + MATERIALS[e.material].height + 0.03
           const lvl = `${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)}`
           const sp = e.stairs ? stairPlan(e) : null
-          if (sp) return <Label3D key={e.id} text={`מדרגות ${sp.count} · ${lvl} עד ${sp.bottom >= 0 ? '+' : ''}${sp.bottom.toFixed(2)} · רום ${fmtNum(sp.riser * 100)} ס"מ${tag(e.label)}`} position={[c.x, e.level + k * 1.5, c.y]} size={k} color="#4a4740" />
-          return <Label3D key={e.id} text={compact ? `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} · ${lvl}` : `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} מ' · ${lvl}${tag(e.label)}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
+          const s = sz(Math.sqrt(A) * 0.14)
+          if (!free(e.id, c.x, c.y, s * 3.2)) return null
+          if (sp) {
+            const ang = Math.atan2(sp.axis.b.y - sp.axis.a.y, sp.axis.b.x - sp.axis.a.x)
+            return <FlatText key={e.id} lines={[`מדרגות ${sp.count} · עולה`, `${sp.bottom >= 0 ? '+' : ''}${sp.bottom.toFixed(2)} עד ${lvl} · רום ${fmtNum(sp.riser * 100)} ס"מ`]} at={[c.x, e.level + 0.05, c.y]} angle={ang} size={s} color={sel ? '#b0522d' : '#4a4740'} border={border} onClick={pick} />
+          }
+          return (
+            <group key={e.id}>
+              {sel && e.poly && <Outline pts={e.poly} y={top} />}
+              <FlatText lines={[`${fmtNum(A)} מ"ר`, `${fmtNum(e.w)}×${fmtNum(e.d)} מ' · מפלס ${lvl}`, tag(e.label)]} at={[c.x, top, c.y]} size={s} color={sel ? '#b0522d' : '#2f5d4a'} border={border} onClick={pick} />
+            </group>
+          )
         }
         if (e.kind === 'object') {
-          if (Math.max(e.w, e.d) < 1.5) return null
-          if (!free(e.x, e.y)) return null
-          return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)} · גובה ${fmtNum(e.h)}${tag(e.label)}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
+          if (!sel && Math.max(e.w, e.d) < 1.5) return null
+          const y = e.y + e.d / 2 + 0.45
+          const s = sz(Math.max(e.w, e.d) * 0.1)
+          if (!free(e.id, e.x, y, s * 3)) return null
+          return (
+            <group key={e.id}>
+              <GroundDim a={{ x: e.x - e.w / 2, y: e.y + e.d / 2 }} b={{ x: e.x + e.w / 2, y: e.y + e.d / 2 }} y={e.level + 0.04} off={0.2} color={ink} />
+              <FlatText lines={[`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)}`, `גובה ${fmtNum(e.h)} · ${tag(e.label)}`]} at={[e.x, e.level + 0.05, y]} size={s} color={sel ? '#b0522d' : '#2f5d4a'} border={border} onClick={pick} />
+            </group>
+          )
         }
         if (e.kind === 'line') {
           const L = polyLength(e.pts)
-          if (L < 2) return null
-          const m = e.pts[Math.floor(e.pts.length / 2)]
-          if (!free(m.x, m.y)) return null
-          return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L)} מ'${e.type === 'path' ? ` × ${fmtNum(e.width)}` : ` · גובה ${fmtNum(e.height)}`}${tag(e.label)}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
+          if (!sel && L < 2) return null
+          const i = Math.max(0, Math.floor(e.pts.length / 2) - 1)
+          const p = e.pts[i]
+          const q = e.pts[i + 1] ?? p
+          const ang = Math.atan2(q.y - p.y, q.x - p.x)
+          const m = { x: (p.x + q.x) / 2 - Math.sin(ang) * (e.width / 2 + 0.4), y: (p.y + q.y) / 2 + Math.cos(ang) * (e.width / 2 + 0.4) }
+          const s = sz(L * 0.05)
+          if (!free(e.id, m.x, m.y, s * 3)) return null
+          return <FlatText key={e.id} lines={[`${LINES[e.type].text} ${fmtNum(L)} מ'`, `${e.type === 'path' ? `רוחב ${fmtNum(e.width)}` : `גובה ${fmtNum(e.height)}`} · ${tag(e.label)}`]} at={[m.x, e.level + 0.06, m.y]} angle={ang} size={s} color={sel ? '#b0522d' : '#2f5d4a'} border={border} onClick={pick} />
         }
         return null
       })}
-    </>
+    </group>
+  )
+}
+
+// קו מתאר מודגש של מה שהמידה מודדת
+function Outline({ pts, y }: { pts: { x: number; y: number }[]; y: number }) {
+  const g = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([...pts, pts[0]].flatMap((p) => [p.x, y, p.y]), 3))
+    return geo
+  }, [pts, y])
+  useEffect(() => () => g.dispose(), [g])
+  return (
+    // @ts-expect-error: line של three ב-JSX
+    <line geometry={g}>
+      <lineBasicMaterial color="#b0522d" />
+    </line>
   )
 }
 
@@ -418,17 +473,17 @@ function SideDims({ elements, k, y }: { elements: Element[]; k: number; y: numbe
     const o2 = k * 6
     const t = k * 0.5
     const seg: number[] = []
-    const labels: { at: [number, number, number]; text: string; outer: boolean }[] = []
+    const labels: { at: [number, number, number]; text: string; outer: boolean; ang: number }[] = []
     const line = (a: [number, number], b: [number, number]) => seg.push(a[0], y, a[1], b[0], y, b[1])
     const chainX = (pts: number[], z: number, outer: boolean) => {
       line([pts[0], z], [pts[pts.length - 1], z])
       for (const x of pts) line([x - t, z + t], [x + t, z - t])
-      for (let i = 1; i < pts.length; i++) labels.push({ at: [(pts[i - 1] + pts[i]) / 2, y + k * 0.6, z + k * 0.9], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer })
+      for (let i = 1; i < pts.length; i++) labels.push({ at: [(pts[i - 1] + pts[i]) / 2, y + 0.02, z + k * 0.7], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer, ang: 0 })
     }
     const chainY = (pts: number[], x: number, outer: boolean) => {
       line([x, pts[0]], [x, pts[pts.length - 1]])
       for (const v of pts) line([x - t, v + t], [x + t, v - t])
-      for (let i = 1; i < pts.length; i++) labels.push({ at: [x + k * 1.2, y + k * 0.6, (pts[i - 1] + pts[i]) / 2], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer })
+      for (let i = 1; i < pts.length; i++) labels.push({ at: [x + k * 0.7, y + 0.02, (pts[i - 1] + pts[i]) / 2], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer, ang: Math.PI / 2 })
     }
     chainX(xs, all.maxY + o1, false)
     chainX([all.minX, all.maxX], all.maxY + o2, true)
@@ -449,7 +504,7 @@ function SideDims({ elements, k, y }: { elements: Element[]; k: number; y: numbe
         <lineBasicMaterial color="#3b5d7a" />
       </lineSegments>
       {geom.labels.map((l, i) => (
-        <Label3D key={i} text={l.text} position={l.at} size={k * (l.outer ? 1.1 : 0.95)} color={l.outer ? '#1d2120' : '#3b5d7a'} />
+        <FlatText key={i} lines={[l.text]} at={l.at} angle={l.ang} size={k * (l.outer ? 0.75 : 0.62)} color={l.outer ? '#1d2120' : '#3b5d7a'} />
       ))}
     </group>
   )
@@ -613,6 +668,9 @@ export default function ModelTab() {
         </div>
       </div>
       <aside className="side">
+        <div className="card flat side-req">
+          <RequirementsSummary project={project} variant={variant} />
+        </div>
         {unapproved > 0 && (
           <div className="notice">
             {unapproved} אלמנטים עוד לא אושרו. המידות שלהם <Tag label="estimated" /> או <Tag label="assumed" />.

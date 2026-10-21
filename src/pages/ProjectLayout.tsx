@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useOutletContext, useParams, Link } from 'react-router-dom'
 import { hasBasis } from '../lib/bom'
-import { activeVariant, updateProject, useApp } from '../lib/store'
+import { activeVariant, useApp } from '../lib/store'
+import { ContextStrip, VariantSwitch } from '../components/VariantContext'
 import type { Project, Variant } from '../lib/types'
 import { Empty, Loading } from '../components/ui'
 import { PrintHead } from '../components/PrintVisuals'
@@ -74,11 +75,12 @@ export default function ProjectLayout() {
     )
   }
   const variant = activeVariant(project)
+  const seg = loc.pathname.split('/')[3] ?? ''
 
   return (
     <div className="stack" style={{ gap: 18 }}>
       {(loc.pathname.split('/')[3] ?? '') !== 'sheet' && <PrintHead project={project} subject={TABS.find((t) => t.to === (loc.pathname.split('/')[3] ?? ''))?.t ?? ''} />}
-      <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'end' }}>
+      <div className="project-head no-print">
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow">
             <Link to="/projects" style={{ textDecoration: 'none' }}>
@@ -90,22 +92,7 @@ export default function ProjectLayout() {
             {project.name}
           </h1>
         </div>
-        <div className="row" style={{ gap: 8, alignItems: 'end' }}>
-        <label className="field" style={{ minWidth: 180 }}>
-          <span>חלופה פעילה</span>
-          <select
-            className="input"
-            value={project.activeVariantId}
-            onChange={(e) => updateProject(project.id, (p) => ({ ...p, activeVariantId: e.target.value }))}
-          >
-            {project.variants.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        </div>
+        <VariantSwitch key={variant.id} project={project} variant={variant} />
       </div>
       <nav className="tabs stage-tabs no-print" aria-label="לשוניות פרויקט">
         {STAGES.map((name, si) => (
@@ -126,6 +113,7 @@ export default function ProjectLayout() {
           </div>
         ))}
       </nav>
+      {seg !== 'sheet' && seg !== 'variants' && <ContextStrip project={project} variant={variant} />}
       <Outlet context={{ project, variant } satisfies ProjectCtx} />
       <StepNav />
     </div>
