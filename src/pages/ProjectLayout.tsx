@@ -3,6 +3,7 @@ import { hasBasis } from '../lib/bom'
 import { activeVariant, updateProject, useApp } from '../lib/store'
 import type { Project, Variant } from '../lib/types'
 import { Empty, Loading } from '../components/ui'
+import { PrintHead } from '../components/PrintVisuals'
 
 export interface ProjectCtx {
   project: Project
@@ -51,6 +52,7 @@ function StepNav() {
 
 export default function ProjectLayout() {
   const { id } = useParams()
+  const loc = useLocation()
   const project = useApp((s) => s.projects.find((p) => p.id === id))
   const ready = useApp((s) => s.ready)
   const userId = useApp((s) => s.userId)
@@ -72,7 +74,8 @@ export default function ProjectLayout() {
 
   return (
     <div className="stack" style={{ gap: 18 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'end' }}>
+      <PrintHead project={project} subject={TABS.find((t) => t.to === (loc.pathname.split('/')[3] ?? ''))?.t ?? ''} />
+      <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'end' }}>
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow">
             <Link to="/projects" style={{ textDecoration: 'none' }}>

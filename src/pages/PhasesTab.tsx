@@ -6,6 +6,9 @@ import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, computeBom, fmtMoney, hasB
 import { Empty, Rise, Tag } from '../components/ui'
 import { PageIntro } from '../components/PageIntro'
 import { lineLabel } from './BomTab'
+import { printPage } from '../lib/printing'
+import { PrintVisuals } from '../components/PrintVisuals'
+import { IconBtn } from '../components/EditIcons'
 
 export default function PhasesTab() {
   const { project, variant } = useProject()
@@ -99,6 +102,10 @@ export default function PhasesTab() {
           ))}
         </>
       )}
+      <div className="row no-print">
+        <IconBtn icon="print" label="הדפסה" onClick={printPage} />
+      </div>
+      <PrintVisuals project={project} />
     </div>
   )
 }

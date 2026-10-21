@@ -1,6 +1,7 @@
 // טבלה אחידה לכל האפליקציה: מיון בחיצים בכל עמודה, קיבוץ לפי קטגוריה, בחירת שורות,
 // סיכום לכל קבוצה, סיכום לנבחרים וסך הכל.
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { usePrinting } from '../lib/printing'
 import { EditIcon } from './EditIcons'
 
 export interface Col<T> {
@@ -53,6 +54,7 @@ export function DataTable<T>({
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [allClosed, setAllClosed] = useState(rows.length > 40)
   const long = rows.length > 40
+  const printing = usePrinting()
   useEffect(() => {
     setAllClosed(long)
     setClosed(new Set())
@@ -207,7 +209,7 @@ export function DataTable<T>({
             {grouped
               ? grouped.map(([g, rs]) => {
                   const keys = rs.map(rowKey)
-                  const isClosed = allClosed ? !closed.has(g) : closed.has(g)
+                  const isClosed = !printing && (allClosed ? !closed.has(g) : closed.has(g))
                   return (
                     <Fragment key={g}>
                       <tr className="group-row">

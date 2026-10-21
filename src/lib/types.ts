@@ -183,6 +183,7 @@ interface Base {
   label: Label
   source: string
   approved: boolean
+  existing?: boolean // קיים בשטח: מוצג בכתב הכמויות בלי תמחור. גדר גבול מגרש קיימת כברירת מחדל
 }
 
 export interface Wall extends Base {

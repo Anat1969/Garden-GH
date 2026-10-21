@@ -2,7 +2,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Element, Project } from '../lib/types'
-import { updateProject } from '../lib/store'
+import { uid, updateProject, updateVariant } from '../lib/store'
+import type { GardenObject } from '../lib/types'
+import { toast } from './ui'
 import { fmtNum } from '../lib/bom'
 import { CITIES } from '../data/israelCities'
 import { bestSpots, buildGrid, comfortMap, RAMPS, shadeMap, shadeNow, siteInfo, siteStats, WIND, windMap, exposure, type Grid, type WindRegime } from '../lib/climate'
@@ -80,7 +82,7 @@ export interface ClimateData {
   ramp: keyof typeof RAMPS
   max: number
   windSpeed: Float32Array | null
-  spots: { at: { x: number; y: number }; score: number }[]
+  spots: { at: { x: number; y: number }; score: number; shade: number; level: number }[]
   stats: { k: string; v: string; tone?: 'good' | 'warn' }[]
 }
 
@@ -99,7 +101,16 @@ export function useClimateData(project: Project, elements: Element[], st: Climat
   const now = useMemo(() => (grid && st.layer === 'sun' && st.mapMode === 'now' ? shadeNow(grid, sun.az, sun.el, site.north) : null), [grid, st.layer, st.mapMode, sun.az, sun.el, site.north])
   const wm = useMemo(() => (needWind ? windMap(grid!, wind, site.north, site.elev) : null), [needWind, grid, wind.dir, wind.speed, site.north, site.elev]) // eslint-disable-line react-hooks/exhaustive-deps
   const cm = useMemo(() => (st.layer === 'comfort' && sm && wm ? comfortMap(st.season, sm.shade, wm) : null), [st.layer, st.season, sm, wm])
-  const spots = useMemo(() => (grid && cm ? bestSpots(grid, cm) : []), [grid, cm])
+  const spots = useMemo(
+    () =>
+      grid && cm && sm
+        ? bestSpots(grid, cm).map((p) => {
+            const i = Math.floor((p.at.y - grid.y0) / grid.cell) * grid.nx + Math.floor((p.at.x - grid.x0) / grid.cell)
+            return { ...p, shade: sm.shade[i] ?? 0, level: grid.ground[i] ?? 0 }
+          })
+        : [],
+    [grid, cm, sm],
+  )
 
   const stats: ClimateData['stats'] = []
   if (grid && st.layer === 'sun' && sm) {
@@ -333,8 +344,26 @@ export function ClimatePanel({ project, data, state }: { project: Project; data:
   )
 }
 
+// הצבת פינות ישיבה במקומות המומלצים: בחורף ספסל בשמש, בקיץ פינת ישיבה ופרגולה כשאין צל
+export function placeSeating(project: Project, elements: Element[], data: ClimateData, season: Season): number {
+  const near = (x: number, y: number) => elements.some((e) => e.kind === 'object' && Math.hypot(e.x - x, e.y - y) < 1.8)
+  const add: GardenObject[] = []
+  const base = { label: 'assumed' as const, approved: false, source: `ניתוח אקלים: מקום מומלץ לישיבה, ${SEASONS.find((s) => s.id === season)!.t}`, rot: 0 }
+  for (const s of data.spots) {
+    if (near(s.at.x, s.at.y)) continue
+    const at = { x: Math.round(s.at.x * 10) / 10, y: Math.round(s.at.y * 10) / 10, level: s.level }
+    if (season === 'winter') add.push({ id: uid(), kind: 'object', type: 'bench', w: 1.8, d: 0.5, h: 0.45, ...at, ...base })
+    else {
+      add.push({ id: uid(), kind: 'object', type: 'dining', w: 2.4, d: 2.4, h: 0.75, ...at, ...base })
+      if (season === 'summer' && s.shade < 0.5) add.push({ id: uid(), kind: 'object', type: 'pergola', w: 3.6, d: 3.6, h: 2.6, ...at, ...base, source: `${base.source}: צל לפינת הישיבה` })
+    }
+  }
+  if (add.length) updateVariant(project.id, (v) => ({ ...v, elements: [...v.elements, ...add] }))
+  return add.length
+}
+
 // תובנות ומקרא בעמודת הצד, ליד המודל
-export function ClimateInsights({ data, st }: { data: ClimateData; st: ClimateState }) {
+export function ClimateInsights({ data, st, project, elements }: { data: ClimateData; st: ClimateState; project: Project; elements: Element[] }) {
   if (st.layer === 'none') return null
   return (
     <div className="card flat climate-insights" data-testid="climate-insights">
@@ -352,6 +381,24 @@ export function ClimateInsights({ data, st }: { data: ClimateData; st: ClimateSt
               <b>{s.v}</b>
             </div>
           ))}
+        </div>
+      )}
+      {st.layer === 'comfort' && data.spots.length > 0 && (
+        <div className="seat-place">
+          <button
+            type="button"
+            className="btn small primary"
+            data-testid="place-seating"
+            onClick={() => {
+              const n = placeSeating(project, elements, data, st.season)
+              toast(n ? `נוספו ${n} פריטים במקומות המומלצים. אפשר לבטל ב-Ctrl+Z` : 'במקומות המומלצים כבר יש פריטים')
+            }}
+          >
+            הצבת פינות ישיבה במקומות המומלצים
+          </button>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {st.season === 'winter' ? 'בחורף: ספסל בשמש ובמחסה מהרוח.' : st.season === 'summer' ? 'בקיץ: פינת ישיבה, ופרגולה כשאין שם צל טבעי.' : 'פינת ישיבה בכל מקום מומלץ.'} נכנס לכתב הכמויות, מסומן "הונח".
+          </div>
         </div>
       )}
       <ClimateLegend ramp={data.ramp} title={st.layer === 'sun' ? (st.mapMode === 'now' ? `צל ב-${fmtHour(st.hour)}` : 'חלק היום בצל') : st.layer === 'wind' ? "מהירות הרוח בגובה 1.50 מ'" : 'נוחות לישיבה'} />

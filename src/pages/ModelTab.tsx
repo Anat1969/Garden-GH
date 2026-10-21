@@ -25,7 +25,26 @@ import { HeatLayer, SeatSpots, SunLight, SunPath, WindArrow, WindParticles, sunV
 import { Atmosphere, GlassMat, GrassField, NatureGround, OpeningFrame, PlasterMat, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
 import { woodPBR } from '../lib/realism'
 import { fmtHour } from '../lib/sun'
+import { saveDocBlob } from '../lib/idb'
+import { modelImageKey } from '../components/PrintVisuals'
 import * as THREE from 'three'
+
+// שומר תמונה של המודל לצירוף להדפסה ולגיליון, כמה שניות אחרי שהתצוגה נרגעת
+function AutoSnapshot({ projectId, version, enabled }: { projectId: string; version: string; enabled: boolean }) {
+  const { gl } = useThree()
+  useEffect(() => {
+    if (!enabled) return
+    const t = setTimeout(() => {
+      try {
+        gl.domElement.toBlob((b) => b && void saveDocBlob(`img:${modelImageKey(projectId)}`, b), 'image/jpeg', 0.88)
+      } catch {
+        /* בלי תמונה */
+      }
+    }, 3500)
+    return () => clearTimeout(t)
+  }, [gl, projectId, version, enabled])
+  return null
+}
 
 function Controls({ target, dist, focus }: { target: [number, number, number]; dist: number; focus: { at: [number, number, number]; key: number } | null }) {
   const { camera, gl, invalidate } = useThree()
@@ -447,6 +466,7 @@ export default function ModelTab() {
         <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
             <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} />
+            <AutoSnapshot projectId={project.id} version={`${variant.id}:${variant.elements.length}:${finish}:${project.updatedAt}`} enabled={climateState.st.layer === 'none' && !selId && !showDims} />
           </ModelFinishCtx.Provider>
         </Canvas>
         <div className="model-tools">
@@ -479,7 +499,7 @@ export default function ModelTab() {
             {unapproved} אלמנטים עוד לא אושרו. המידות שלהם <Tag label="estimated" /> או <Tag label="assumed" />.
           </div>
         )}
-        <ClimateInsights data={climate} st={climateState.st} />
+        <ClimateInsights data={climate} st={climateState.st} project={project} elements={variant.elements} />
         {selected ? (
           <>
             <Link className="btn small" to={`../plan?el=${selected.id}&focus=1`}>

@@ -160,6 +160,13 @@ export function ElementEditor({ project, el, elements, name, onClose }: { projec
             </label>
           </>
         )}
+        {el.kind !== 'sketch' && !(el.kind === 'wall' && el.scope === 'house') && el.kind !== 'opening' && (
+          <label className="field" style={{ alignSelf: 'end' }}>
+            <span>
+              <input type="checkbox" checked={el.existing ?? (el.kind === 'fence' && el.boundary)} onChange={(e) => save({ existing: e.target.checked } as Partial<Element>, true)} /> קיים בשטח, לא בתמחור
+            </span>
+          </label>
+        )}
         <label className="field">
           <span>תווית המידות</span>
           <select className="input" value={el.label} onChange={(e) => save({ label: e.target.value as Label }, true)}>

@@ -3,6 +3,7 @@ import { LINES, MATERIALS, MATERIAL_TEXT, OBJECTS } from './garden'
 import { polyArea } from './geom'
 
 export const DISCLAIMER = 'הערכה בלבד עד לאישור מול מחירון מעודכן וספק.'
+export const VAT = 0.18 // המחירון ללא מע"מ
 export const NO_BASIS = 'אין בסיס למספרים'
 
 export type Category =
@@ -129,7 +130,12 @@ export interface BomLine {
   min: number | null
   max: number | null
   warning?: string
+  how: string // איך חושבה הכמות
+  existing: boolean // קיים בשטח, לא מתומחר
 }
+
+// אלמנט קיים: לא נכנס לעלות. גדר גבול מגרש מההיתר קיימת אלא אם סומן אחרת
+export const isExisting = (e: Element) => (e.existing !== undefined ? e.existing : e.kind === 'fence' && e.boundary)
 
 export function hasBasis(p: Project): boolean {
   return Boolean(p.permit?.scale.metersPerPt || p.permit?.scale.source === 'manual-only')
@@ -171,76 +177,86 @@ export function numberedNames(elements: Element[]): Map<string, string> {
   return out
 }
 
-function quantities(e: Element): { category: Category; qty: number; warning?: string }[] {
+interface Qty {
+  category: Category
+  qty: number
+  how: string
+  warning?: string
+  prefer?: string // קוד סעיף מועדף כשקיים במחירון
+}
+
+const n2 = (v: number) => fmtNum(v)
+
+function quantities(e: Element): Qty[] {
   if (e.kind === 'surface') {
     const area = surfaceArea(e)
+    const A = `שטח ${n2(area)} מ"ר`
+    const dig = (d: number, why: string): Qty => ({ category: 'earthwork', qty: area * d, how: `${A} × עומק ${n2(d)} מ' (${why})` })
     switch (e.material) {
       case 'paving':
       case 'tiles':
-      case 'stone':
       case 'concrete':
         return [
-          { category: 'earthwork', qty: area * 0.3 },
-          { category: 'subbase', qty: area * 0.15 },
-          { category: MATERIALS[e.material].category, qty: area },
+          dig(0.3, 'חפירה למצע, חול וריצוף'),
+          { category: 'subbase', qty: area * 0.15, how: `${A} × שכבת מצע ${n2(0.15)} מ'` },
+          { category: MATERIALS[e.material].category, qty: area, how: A },
         ]
+      case 'stone':
+        // סעיף האבן הטבעית כולל מצע, לכן בלי שורת מצע נפרדת
+        return [dig(0.25, 'חפירה לאבן ומצע'), { category: 'stone', qty: area, how: `${A} (הסעיף כולל מצע)` }]
       case 'deck':
-        return [
-          { category: 'earthwork', qty: area * 0.15 },
-          { category: 'deck', qty: area },
-        ]
+        return [dig(0.15, 'יסודות וניקוז מתחת לדק'), { category: 'deck', qty: area, how: A }]
       case 'gravel':
       case 'pebbles':
       case 'sand':
       case 'mulch':
-        return [
-          { category: 'earthwork', qty: area * 0.1 },
-          { category: MATERIALS[e.material].category, qty: area },
-        ]
+        return [dig(0.1, 'פינוי שכבה עליונה'), { category: MATERIALS[e.material].category, qty: area, how: A }]
       case 'turf':
         return [
-          { category: 'subbase', qty: area * 0.08 },
-          { category: 'turf', qty: area },
+          { category: 'subbase', qty: area * 0.08, how: `${A} × שכבת מצע ${n2(0.08)} מ'` },
+          { category: 'turf', qty: area, how: A },
         ]
       case 'lawn':
         return [
-          { category: 'soil', qty: area * 0.15 },
-          { category: 'irrigation', qty: area, warning: 'חיבור לקו מים ולחץ: דורש בעל מקצוע מוסמך' },
-          { category: 'lawn', qty: area },
+          { category: 'soil', qty: area * 0.1, how: `${A} × שכבת אדמה גננית ${n2(0.1)} מ'` },
+          { category: 'irrigation', qty: area, how: `${A}, מתזים לדשא`, prefer: 'GH-41-16', warning: 'חיבור לקו מים ולחץ: דורש בעל מקצוע מוסמך' },
+          { category: 'lawn', qty: area, how: A },
         ]
       case 'bed':
         return [
-          { category: 'soil', qty: area * 0.4 },
-          { category: 'irrigation', qty: area, warning: 'חיבור לקו מים ולחץ: דורש בעל מקצוע מוסמך' },
-          { category: 'planting', qty: area },
+          { category: 'soil', qty: area * 0.3, how: `${A} × שכבת אדמה גננית ${n2(0.3)} מ'` },
+          { category: 'irrigation', qty: area, how: `${A}, טפטוף לערוגה`, prefer: 'GH-41-15', warning: 'חיבור לקו מים ולחץ: דורש בעל מקצוע מוסמך' },
+          { category: 'planting', qty: area, how: A },
         ]
       case 'water':
-        return [
-          { category: 'earthwork', qty: area * 0.6 },
-          { category: 'water', qty: area, warning: 'מים, איטום ומשאבה: דורש בעל מקצוע מוסמך' },
-        ]
+        return [dig(0.6, 'חפירה לבריכה'), { category: 'water', qty: area, how: A, warning: 'מים, איטום ומשאבה: דורש בעל מקצוע מוסמך' }]
     }
   }
   if (e.kind === 'object') {
     const def = OBJECTS[e.type]
-    const qty = CATEGORY_UNIT[def.category] === 'm2' ? e.w * e.d : CATEGORY_UNIT[def.category] === 'm' ? Math.max(e.w, e.d) : 1
-    return [{ category: def.category, qty, warning: def.note }]
+    const u = CATEGORY_UNIT[def.category]
+    const qty = u === 'm2' ? e.w * e.d : u === 'm' ? Math.max(e.w, e.d) : 1
+    const how = u === 'm2' ? `${n2(e.w)} × ${n2(e.d)} מ'` : u === 'm' ? `אורך ${n2(qty)} מ'` : 'יחידה אחת'
+    return [{ category: def.category, qty, how, warning: def.note }]
   }
   if (e.kind === 'line') {
     const def = LINES[e.type]
     const L = polyLength(e.pts)
-    if (e.type === 'path') return [{ category: 'path', qty: L * e.width }]
-    if (e.type === 'low_wall') return [{ category: 'garden_wall', qty: L * e.height, warning: e.height > 1 ? 'קיר מעל מטר: דורש מהנדס מוסמך' : undefined }]
-    return [{ category: def.category, qty: L, warning: def.note }]
+    if (e.type === 'path') return [{ category: 'path', qty: L * e.width, how: `אורך ${n2(L)} מ' × רוחב ${n2(e.width)} מ'` }]
+    if (e.type === 'low_wall') return [{ category: 'garden_wall', qty: L * e.height, how: `אורך ${n2(L)} מ' × גובה ${n2(e.height)} מ' (שטח חזית)`, warning: e.height > 1 ? 'קיר מעל מטר: דורש מהנדס מוסמך' : undefined }]
+    return [{ category: def.category, qty: L, how: `אורך ${n2(L)} מ'`, warning: def.note }]
   }
   if (e.kind === 'fence') {
-    return [{ category: 'fence', qty: len(e.x1, e.y1, e.x2, e.y2), warning: e.boundary ? 'גבול מגרש: לאימות במדידה' : undefined }]
+    const L = len(e.x1, e.y1, e.x2, e.y2)
+    return [{ category: 'fence', qty: L, how: `אורך ${n2(L)} מ'`, warning: e.boundary ? 'גבול מגרש: לאימות במדידה' : undefined }]
   }
   if (e.kind === 'wall' && e.scope === 'garden') {
+    const L = len(e.x1, e.y1, e.x2, e.y2)
     return [
       {
         category: 'garden_wall',
-        qty: len(e.x1, e.y1, e.x2, e.y2) * e.height,
+        qty: L * e.height,
+        how: `אורך ${n2(L)} מ' × גובה ${n2(e.height)} מ' (שטח חזית)`,
         warning: e.height > 1 ? 'קיר מעל מטר או קיר תומך: דורש מהנדס מוסמך' : undefined,
       },
     ]
@@ -259,8 +275,10 @@ export function computeBom(v: Variant, prices: PriceItem[]): BomLine[] {
       const key = `${e.id}:${q.category}`
       const assigned = v.assignments[key]
       const unit = CATEGORY_UNIT[q.category]
+      const existing = isExisting(e)
       const item =
         (assigned ? prices.find((p) => p.code === assigned) : undefined) ??
+        (q.prefer ? prices.find((p) => p.code === q.prefer && p.unit === unit) : undefined) ??
         prices.find((p) => p.category === q.category && p.unit === unit) ??
         prices.find((p) => p.category === q.category) ??
         null
@@ -269,7 +287,7 @@ export function computeBom(v: Variant, prices: PriceItem[]): BomLine[] {
       let total: number | null = null
       let min: number | null = null
       let max: number | null = null
-      if (item && !unitMismatch) {
+      if (item && !unitMismatch && !existing) {
         total = qty * item.price
         const pr = item.verified ? PRICE_RANGE.verified : PRICE_RANGE.unverified
         const qr = QTY_RANGE[e.label]
@@ -290,6 +308,8 @@ export function computeBom(v: Variant, prices: PriceItem[]): BomLine[] {
         min,
         max,
         warning: q.warning,
+        how: q.how,
+        existing,
       })
     }
   }
@@ -302,6 +322,7 @@ export function sumRange(lines: BomLine[]) {
   let total = 0
   let missing = 0
   for (const l of lines) {
+    if (l.existing) continue
     if (l.total === null) missing++
     else {
       total += l.total
