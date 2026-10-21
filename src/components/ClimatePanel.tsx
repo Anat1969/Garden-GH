@@ -7,7 +7,7 @@ import type { GardenObject } from '../lib/types'
 import { toast } from './ui'
 import { fmtNum } from '../lib/bom'
 import { CITIES } from '../data/israelCities'
-import { bestSpots, buildGrid, comfortMap, RAMPS, shadeMap, shadeNow, siteInfo, siteStats, WIND, windMap, exposure, type Grid, type WindRegime } from '../lib/climate'
+import { bestSpots, buildGrid, comfortMap, comfortParts, RAMPS, shadeMap, shadeNow, siteInfo, siteStats, WIND, windMap, exposure, type Grid, type WindRegime } from '../lib/climate'
 import { fmtHour, SEASONS, sunAt, sunriseSunset, type Season } from '../lib/sun'
 import { Rich, Tag } from './ui'
 import { computeClimate3, plannerInsights } from '../lib/climateScores'
@@ -86,7 +86,7 @@ export interface ClimateData {
   ramp: keyof typeof RAMPS
   max: number
   windSpeed: Float32Array | null
-  spots: { at: { x: number; y: number }; score: number; shade: number; level: number }[]
+  spots: { at: { x: number; y: number }; score: number; shade: number; level: number; sunH: number; wind: number; sunFit: number; windFit: number }[]
   stats: { k: string; v: string; tone?: 'good' | 'warn' }[]
 }
 
@@ -111,10 +111,13 @@ export function useClimateData(project: Project, elements: Element[], st: Climat
       grid && cm && sm
         ? bestSpots(grid, cm).map((p) => {
             const i = Math.floor((p.at.y - grid.y0) / grid.cell) * grid.nx + Math.floor((p.at.x - grid.x0) / grid.cell)
-            return { ...p, shade: sm.shade[i] ?? 0, level: grid.ground[i] ?? 0 }
+            const shade = sm.shade[i] ?? 0
+            const v = wm?.[i] ?? 0
+            const parts = comfortParts(st.season, shade, v)
+            return { ...p, shade, level: grid.ground[i] ?? 0, sunH: sm.sunHours[i] ?? 0, wind: v, sunFit: parts.sun, windFit: parts.wind }
           })
         : [],
-    [grid, cm, sm],
+    [grid, cm, sm, wm, st.season],
   )
 
   const stats: ClimateData['stats'] = []
@@ -154,6 +157,16 @@ export function useClimateData(project: Project, elements: Element[], st: Climat
     spots,
     stats,
   }
+}
+
+// פס התאמה קטן: מכחול (לא מתאים) לירוק (מתאים)
+function FitBar({ v }: { v: number }) {
+  const c = v > 0.75 ? '#3f8f5a' : v > 0.45 ? '#d08a2c' : '#4f7fb3'
+  return (
+    <i className="fit-bar" aria-hidden="true">
+      <i style={{ width: `${Math.round(Math.max(0.05, Math.min(1, v)) * 100)}%`, background: c }} />
+    </i>
+  )
 }
 
 const LEGEND: Record<'shade' | 'wind' | 'comfort', [string, string]> = {
@@ -413,10 +426,34 @@ export function ClimateInsights({ data, st, project, elements }: { data: Climate
       {st.layer === 'comfort' && data.spots.length > 0 && (
         <div className="spot-list" data-testid="spot-list">
           {data.spots.map((s, i) => (
-            <div key={i}>
-              <b>מקום {i + 1}:</b> ציון {Math.round(s.score * 100)}, צל {Math.round(s.shade * 100)}% מהיום
+            <div key={i} className="spot-row">
+              <div className="spot-top">
+                <b>מקום {i + 1}</b>
+                <span>
+                  בכלל <b>{Math.round(s.score * 100)}</b> · {s.score > 0.8 ? 'מצוין' : s.score > 0.6 ? 'טוב' : 'סביר'}
+                  {st.year ? ', שקלול כל השנה' : ''}
+                </span>
+              </div>
+              <div className="spot-part">
+                <span>שמש</span>
+                <FitBar v={s.sunFit} />
+                <span>
+                  <b>{fmtNum(s.sunH)}</b> שעות, צל {Math.round(s.shade * 100)}%.{' '}
+                  {st.season === 'summer' ? (s.sunFit > 0.6 ? 'מוצל בשעות החמות' : 'חשוף, כדאי הצללה') : st.season === 'winter' ? (s.sunFit > 0.6 ? 'שמש חורף נעימה' : 'מוצל מדי לחורף') : s.sunFit > 0.6 ? 'איזון שמש וצל' : 'לא מאוזן'}
+                </span>
+              </div>
+              <div className="spot-part">
+                <span>רוח</span>
+                <FitBar v={s.windFit} />
+                <span>
+                  <b>{fmtNum(s.wind)}</b> מ"ש. {s.windFit > 0.75 ? (st.season === 'summer' ? 'בריזה נעימה' : 'מוגן מרוח') : s.windFit > 0.45 ? 'רוח בינונית' : 'חשוף, כדאי מחסה'}
+                </span>
+              </div>
             </div>
           ))}
+          <div className="muted" style={{ fontSize: 12 }}>
+            כל הערכים <b>מוערכים</b>: שמש לפי מסלול השמש והצללות, רוח לפי משטר הרוחות באזור. הציון הכללי משקלל את השניים לפי העונה.
+          </div>
         </div>
       )}
       {st.layer === 'comfort' && data.spots.length > 0 && (

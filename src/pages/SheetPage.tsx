@@ -11,6 +11,8 @@ import { renderView } from '../lib/sheet/render3d'
 import { Sheet, sheetCss, type SheetImages } from '../components/sheet/Sheet'
 import { Empty, Loading, toast } from '../components/ui'
 import { IconBtn } from '../components/EditIcons'
+import { PageIntro } from '../components/PageIntro'
+import { fmtNum } from '../lib/bom'
 import { printPage } from '../lib/printing'
 
 declare global {
@@ -244,9 +246,26 @@ export default function SheetPage() {
   }
   return (
     <div className="stack" style={{ gap: 12 }}>
+      <div className="no-print">
+        <PageIntro
+          compact
+          art="variants"
+          title="גליון אחד שמספר את הגינה"
+          points={[
+            <>דף <b>A4 לאורך</b>: הדמיה, תוכנית עם טבלת שטחים, לוח חומרים, הייקו ופוסט.</>,
+            <>זווית ההדמיה נקבעת ב<b>סיבוב, גובה מבט וקרבה</b>.</>,
+            <>להייקו ולפוסט יש <b>הצעות לפי מה שיש בגינה</b>, וכל טקסט ניתן לעריכה.</>,
+          ]}
+          insights={[
+            { k: 'חומרים בלוח', v: model.chips.length },
+            { k: 'תוכניות', v: model.plans.length },
+            { k: 'שטח גינה', v: model.meta.gardenArea ? `${fmtNum(model.meta.gardenArea)} מ"ר` : 'לא חושב', label: model.meta.gardenArea ? 'estimated' : undefined },
+          ]}
+        />
+      </div>
       <div className="row no-print" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <div className="muted" style={{ fontSize: 14 }}>
-          דף <b>A4 לאורך</b>: הדמיה, תוכנית, לוח חומרים ופרטי הפרויקט. עורכים בצד, ומדפיסים או שומרים כ-PDF.
+          עורכים בצד, ומדפיסים או שומרים כ-<b>PDF</b>.
         </div>
         <div className="row" style={{ gap: 6 }}>
           <IconBtn icon="print" label="הדפסה או שמירה כ-PDF" className="primary" onClick={printPage} testId="sheet-print" />

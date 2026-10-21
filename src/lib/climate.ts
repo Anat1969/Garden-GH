@@ -485,25 +485,29 @@ export function windMap(g: Grid, w: WindRegime, north: number, elev: number): Fl
 
 // ---------- נוחות לישיבה ----------
 
+// נוחות לישיבה בשני רכיבים: שמש (או צל בקיץ) ורוח, וציון כללי משוקלל
+export function comfortParts(season: Season, s: number, v: number): { sun: number; wind: number; total: number } {
+  if (season === 'winter') {
+    const sun = 1 - s
+    const wind = 1 - Math.min(1, Math.max(0, (v - 1) / 3))
+    return { sun, wind, total: 0.6 * sun + 0.4 * wind }
+  }
+  if (season === 'summer') {
+    const sun = s
+    const wind = v < 0.6 ? 0.5 : v <= 3.5 ? 1 : Math.max(0, 1 - (v - 3.5) / 3)
+    return { sun, wind, total: 0.6 * sun + 0.4 * wind }
+  }
+  const sun = Math.max(0, 1 - Math.abs(1 - s - 0.6) / 0.6)
+  const wind = 1 - Math.min(1, Math.max(0, (v - 1.5) / 3))
+  return { sun, wind, total: 0.5 * sun + 0.5 * wind }
+}
+
 export function comfortMap(season: Season, shade: Float32Array, wind: Float32Array): Float32Array {
   const out = new Float32Array(shade.length)
   for (let i = 0; i < shade.length; i++) {
     const s = shade[i]
     const v = wind[i]
-    if (Number.isNaN(s) || Number.isNaN(v)) {
-      out[i] = NaN
-      continue
-    }
-    if (season === 'winter') {
-      const calm = 1 - Math.min(1, Math.max(0, (v - 1) / 3))
-      out[i] = 0.6 * (1 - s) + 0.4 * calm
-    } else if (season === 'summer') {
-      const breeze = v < 0.6 ? 0.5 : v <= 3.5 ? 1 : Math.max(0, 1 - (v - 3.5) / 3)
-      out[i] = 0.6 * s + 0.4 * breeze
-    } else {
-      const calm = 1 - Math.min(1, Math.max(0, (v - 1.5) / 3))
-      out[i] = 0.5 * (1 - Math.abs(1 - s - 0.6) / 0.6) + 0.5 * calm
-    }
+    out[i] = Number.isNaN(s) || Number.isNaN(v) ? NaN : comfortParts(season, s, v).total
   }
   return out
 }

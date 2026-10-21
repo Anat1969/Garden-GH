@@ -218,7 +218,7 @@ export default function Guide() {
                     <Hl text={g.term} q={gq} />
                   </dt>
                   <dd>
-                    <Hl text={g.meaning} q={gq} />
+                    {gq.trim() ? <Hl text={g.meaning} q={gq} /> : <Emph text={g.meaning} />}
                   </dd>
                 </div>
               ))}

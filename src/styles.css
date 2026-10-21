@@ -685,3 +685,14 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
 .stage-name b { color: var(--accent); }
 .stage-row { display: flex; gap: 2px; }
 .step-n { width: auto; min-width: 26px; padding: 0 4px; border-radius: 11px; }
+
+/* נוחות לישיבה: פירוק לשמש, רוח וכללי */
+.spot-list{display:grid;gap:8px;margin-top:10px;font-size:13px}
+.spot-row{display:grid;gap:4px;padding:8px 0;border-bottom:1px solid #efece4}
+.spot-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.spot-top>span{color:var(--muted,#6b706d);font-size:12px}
+.spot-top>span b{color:#1d2120;font-size:14px}
+.spot-part{display:grid;grid-template-columns:30px 40px minmax(0,1fr);gap:8px;align-items:center;font-size:12px}
+.spot-part>span:first-child{color:var(--muted,#6b706d)}
+.fit-bar{display:inline-block;width:40px;height:5px;border-radius:3px;background:#e8e5dd;overflow:hidden}
+.fit-bar>i{display:block;height:100%;border-radius:3px}

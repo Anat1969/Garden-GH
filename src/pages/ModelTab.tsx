@@ -14,6 +14,7 @@ import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
 import { BuildingMass, HouseMat, Label3D, NorthArrow, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
+import { stairPlan } from '../lib/stairs'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
 import { Tag } from '../components/ui'
@@ -60,7 +61,12 @@ function Controls({ target, dist, focus, view }: { target: [number, number, numb
     const c = ref.current
     if (!c) return
     c.target.set(target[0], 0, target[2])
-    if (view.id === 'top') camera.position.set(target[0], dist * 1.25, target[2] + 0.01)
+    // מבט על: מרחק גדול יותר ומרכז מוזז מעט לדרום ולמזרח, כדי ששרשראות המידה בצדדים ייכנסו לפריים
+    if (view.id === 'top') {
+      const sh = dist * 0.06
+      c.target.set(target[0] + sh, 0, target[2] + sh)
+      camera.position.set(target[0] + sh, dist * 1.55, target[2] + sh + 0.01)
+    }
     else if (view.id === 'eye') camera.position.set(target[0] + dist * 0.15, 1.65, target[2] + dist * 0.55)
     else camera.position.set(target[0] + dist * 0.7, dist * 0.75, target[2] + dist * 0.9)
     if (view.id === 'eye') c.target.set(target[0], 1.2, target[2])
@@ -332,6 +338,7 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
       {project.building && footprints.length > 0 && !groundSel && <BuildingMass footprints={footprints} b={project.building} />}
       {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
       {showDims && <DimLabels elements={elements} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} />}
+      {showDims && <SideDims elements={elements} k={Math.max(0.38, bounds.size * 0.022)} y={Math.max(0.02, bounds.minL)} />}
       {showDims && view.id !== 'top' && st && mpp > 0 &&
         st.levels.slice(0, 60).map((l, i) => {
           const x = l.at.x * mpp
@@ -352,7 +359,7 @@ function DimLabels({ elements, k, compact }: { elements: Element[]; k: number; c
   const placed: { x: number; y: number }[] = []
   // בלי חפיפה: תווית שקרובה מדי לתווית קודמת לא מוצגת
   const free = (x: number, y: number) => {
-    if (placed.some((p) => Math.abs(p.x - x) < k * 7 && Math.abs(p.y - y) < k * 2.2)) return false
+    if (placed.some((p) => Math.abs(p.x - x) < k * (compact ? 7 : 10) && Math.abs(p.y - y) < k * (compact ? 2.2 : 3))) return false
     placed.push({ x, y })
     return true
   }
@@ -362,35 +369,89 @@ function DimLabels({ elements, k, compact }: { elements: Element[]; k: number; c
       {ordered.map((e) => {
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          if (L < (compact ? 3.5 : 2.5) || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
+          // במבט בפרספקטיבה: בלי תוויות לקירות הבית (מידותיו בשרשראות ובמבט על), וקירות קצרים בלי תווית
+          if (!compact && e.kind === 'wall' && e.scope === 'house') return null
+          if (L < 3.5 || (e.kind === 'wall' && e.scope === 'house' && !e.approved && L < 4)) return null
           const x = (e.x1 + e.x2) / 2
           const y = (e.y1 + e.y2) / 2
-          if (compact && !free(x, y)) return null
+          if (!free(x, y)) return null
           return <Label3D key={e.id} text={`${fmtNum(L)} מ' · גובה ${fmtNum(e.height)}${tag(e.label)}`} position={[x, e.height + k, y]} size={k} />
         }
         if (e.kind === 'surface') {
           const A = surfaceArea(e)
-          if (compact && A < 4) return null
+          if (A < 4) return null
           const c = e.poly ? centroid(e.poly) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
-          if (compact && !free(c.x, c.y)) return null
+          if (!free(c.x, c.y)) return null
           const lvl = `${e.level >= 0 ? '+' : ''}${e.level.toFixed(2)}`
+          const sp = e.stairs ? stairPlan(e) : null
+          if (sp) return <Label3D key={e.id} text={`מדרגות ${sp.count} · ${lvl} עד ${sp.bottom >= 0 ? '+' : ''}${sp.bottom.toFixed(2)} · רום ${fmtNum(sp.riser * 100)} ס"מ${tag(e.label)}`} position={[c.x, e.level + k * 1.5, c.y]} size={k} color="#4a4740" />
           return <Label3D key={e.id} text={compact ? `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} · ${lvl}` : `${fmtNum(A)} מ"ר · ${fmtNum(e.w)}×${fmtNum(e.d)} מ' · ${lvl}${tag(e.label)}`} position={[c.x, e.level + k * 1.5, c.y]} size={k * 1.1} color="#2f5d4a" />
         }
         if (e.kind === 'object') {
           if (Math.max(e.w, e.d) < 1.5) return null
-          if (compact && !free(e.x, e.y)) return null
+          if (!free(e.x, e.y)) return null
           return <Label3D key={e.id} text={`${OBJECTS[e.type].text} ${fmtNum(e.w)}×${fmtNum(e.d)} · גובה ${fmtNum(e.h)}${tag(e.label)}`} position={[e.x, e.level + e.h + k, e.y]} size={k} color="#2f5d4a" />
         }
         if (e.kind === 'line') {
           const L = polyLength(e.pts)
           if (L < 2) return null
           const m = e.pts[Math.floor(e.pts.length / 2)]
-          if (compact && !free(m.x, m.y)) return null
+          if (!free(m.x, m.y)) return null
           return <Label3D key={e.id} text={`${LINES[e.type].text} ${fmtNum(L)} מ'${e.type === 'path' ? ` × ${fmtNum(e.width)}` : ` · גובה ${fmtNum(e.height)}`}${tag(e.label)}`} position={[m.x, e.level + e.height + k, m.y]} size={k} color="#2f5d4a" />
         }
         return null
       })}
     </>
+  )
+}
+
+// שרשראות מידה בצידי המודל, כמו בשרטוט: קצוות הבית והגינה בשורה הפנימית, וסך הכל בחיצונית
+function SideDims({ elements, k, y }: { elements: Element[]; k: number; y: number }) {
+  const all = boundsOf(elements.filter((e) => e.kind !== 'sketch' && e.kind !== 'opening'))
+  const house = boundsOf(elements.filter((e) => e.kind === 'wall' && e.scope === 'house'))
+  const geom = useMemo(() => {
+    if (!all) return null
+    const merge = (v: number[]) => [...v].sort((a, b) => a - b).filter((x, i, arr) => i === 0 || x - arr[i - 1] > 0.4)
+    const xs = merge([all.minX, all.maxX, ...(house ? [house.minX, house.maxX] : [])])
+    const ys = merge([all.minY, all.maxY, ...(house ? [house.minY, house.maxY] : [])])
+    const o1 = k * 3
+    const o2 = k * 6
+    const t = k * 0.5
+    const seg: number[] = []
+    const labels: { at: [number, number, number]; text: string; outer: boolean }[] = []
+    const line = (a: [number, number], b: [number, number]) => seg.push(a[0], y, a[1], b[0], y, b[1])
+    const chainX = (pts: number[], z: number, outer: boolean) => {
+      line([pts[0], z], [pts[pts.length - 1], z])
+      for (const x of pts) line([x - t, z + t], [x + t, z - t])
+      for (let i = 1; i < pts.length; i++) labels.push({ at: [(pts[i - 1] + pts[i]) / 2, y + k * 0.6, z + k * 0.9], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer })
+    }
+    const chainY = (pts: number[], x: number, outer: boolean) => {
+      line([x, pts[0]], [x, pts[pts.length - 1]])
+      for (const v of pts) line([x - t, v + t], [x + t, v - t])
+      for (let i = 1; i < pts.length; i++) labels.push({ at: [x + k * 1.2, y + k * 0.6, (pts[i - 1] + pts[i]) / 2], text: `${fmtNum(pts[i] - pts[i - 1])} מ'`, outer })
+    }
+    chainX(xs, all.maxY + o1, false)
+    chainX([all.minX, all.maxX], all.maxY + o2, true)
+    chainY(ys, all.maxX + o1, false)
+    chainY([all.minY, all.maxY], all.maxX + o2, true)
+    // קווי עזר מהקצוות אל השרשראות
+    for (const x of xs) line([x, all.maxY + k * 0.6], [x, all.maxY + o2 + t])
+    for (const v of ys) line([all.maxX + k * 0.6, v], [all.maxX + o2 + t, v])
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3))
+    return { g, labels }
+  }, [all?.minX, all?.maxX, all?.minY, all?.maxY, house?.minX, house?.maxX, house?.minY, house?.maxY, k, y]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => geom?.g.dispose(), [geom])
+  if (!geom) return null
+  return (
+    <group>
+      <lineSegments geometry={geom.g}>
+        <lineBasicMaterial color="#3b5d7a" />
+      </lineSegments>
+      {geom.labels.map((l, i) => (
+        <Label3D key={i} text={l.text} position={l.at} size={k * (l.outer ? 1.1 : 0.95)} color={l.outer ? '#1d2120' : '#3b5d7a'} />
+      ))}
+    </group>
   )
 }
 
