@@ -64,32 +64,130 @@ export function DimLine({ a, b, k, text, color = DIM }: { a: Pt; b: Pt; k: numbe
   )
 }
 
-// 1. אלמנטים: אורך, רוחב, שטח וגובה
-export function DimsElements({ elements, k }: { elements: Element[]; k: number }) {
-  const fs = 11
+// תגית מידה לחיצה: רקע לבן, מסגרת כשהיא שייכת לאלמנט הנבחר. לחיצה בוחרת את מה שהיא מודדת
+const tagSize = (lines: string[], k: number) => {
+  const fs = k * 10.5
+  return { fs, w: Math.max(...lines.map((l, i) => l.length * (i ? 0.52 : 0.58))) * fs + k * 10, h: fs * (1.2 + (lines.length - 1) * 1.05) + k * 4 }
+}
+
+function Tag2({ x, y, k, lines, color, sel, rot = 0, onPick }: { x: number; y: number; k: number; lines: string[]; color: string; sel: boolean; rot?: number; onPick?: () => void }) {
+  const { fs, w, h } = tagSize(lines, k)
+  return (
+    <g
+      className="dim-tag"
+      transform={rot ? `rotate(${rot} ${x} ${y})` : undefined}
+      onPointerDown={
+        onPick
+          ? (ev) => {
+              ev.stopPropagation()
+              onPick()
+            }
+          : undefined
+      }
+      style={{ cursor: onPick ? 'pointer' : undefined }}
+    >
+      <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={k * 3} fill="#fff" fillOpacity={0.92} stroke={sel ? '#b0522d' : color} strokeOpacity={sel ? 1 : 0.35} strokeWidth={k * (sel ? 1.6 : 0.8)} />
+      {lines.map((l, i) => (
+        <text key={i} x={x} y={y - h / 2 + k * 2 + fs * 0.6 + i * fs * 1.05} fontSize={i ? fs * 0.86 : fs} fontWeight={i ? 400 : 600} textAnchor="middle" dominantBaseline="middle" fill={sel ? '#b0522d' : color} opacity={i ? 0.8 : 1} style={{ fontFamily: 'IBM Plex Sans Hebrew, sans-serif' }} pointerEvents="none">
+          {l}
+        </text>
+      ))}
+    </g>
+  )
+}
+
+// קו מידה מקביל לאלמנט, מוסט לצד, עם קווי עזר אל הקצוות שנמדדו
+function OffsetDim({ a, b, off, k, color }: { a: Pt; b: Pt; off: number; k: number; color: string }) {
+  const L = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const nx = (-(b.y - a.y) / L) * off
+  const ny = ((b.x - a.x) / L) * off
+  const A = { x: a.x + nx, y: a.y + ny }
+  const B = { x: b.x + nx, y: b.y + ny }
+  return (
+    <g pointerEvents="none">
+      <line x1={a.x + nx * 0.2} y1={a.y + ny * 0.2} x2={A.x + nx * 0.2} y2={A.y + ny * 0.2} stroke={color} strokeWidth={k * 0.6} opacity={0.7} />
+      <line x1={b.x + nx * 0.2} y1={b.y + ny * 0.2} x2={B.x + nx * 0.2} y2={B.y + ny * 0.2} stroke={color} strokeWidth={k * 0.6} opacity={0.7} />
+      <DimLine a={A} b={B} k={k} color={color} text="" />
+    </g>
+  )
+}
+
+// 1. אלמנטים: כל מידה מחוברת למה שהיא מודדת. קיר וגדר: קו מידה מקביל. משטח: תגית שטח במרכזו. לחיצה בוחרת
+export function DimsElements({ elements, k, selected, onPick }: { elements: Element[]; k: number; selected?: string | null; onPick?: (id: string) => void }) {
+  // בלי חפיפה: כל תגית תופסת מלבן. תגית שנוגעת בתגית קודמת לא מוצגת (הנבחר תמיד מוצג)
+  const placed: { x: number; y: number; w: number; h: number }[] = []
+  const free = (id: string, x: number, y: number, lines: string[], rot = 0) => {
+    const t = tagSize(lines, k)
+    const vertical = Math.abs(Math.abs(rot) - 90) < 30
+    const w = (vertical ? t.h : t.w) + k * 4
+    const h = (vertical ? t.w : t.h) + k * 4
+    if (id !== selected && placed.some((p) => Math.abs(p.x - x) * 2 < p.w + w && Math.abs(p.y - y) * 2 < p.h + h)) return false
+    placed.push({ x, y, w, h })
+    return true
+  }
+  const rank = (e: Element) => (e.id === selected ? 0 : e.kind === 'wall' && e.scope === 'house' ? 2 : 1)
+  const ordered = [...elements].sort((a, b) => rank(a) - rank(b) || (b.kind === 'surface' ? surfaceArea(b) : 0) - (a.kind === 'surface' ? surfaceArea(a) : 0))
   return (
     <g data-testid="plan-dims">
-      {elements.map((e) => {
+      {ordered.map((e) => {
+        const sel = e.id === selected
         const tag = LABEL_TEXT[e.label]
+        const pick = onPick ? () => onPick(e.id) : undefined
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          if (L < 0.5) return null
-          return <Txt key={e.id} x={(e.x1 + e.x2) / 2} y={(e.y1 + e.y2) / 2 - fs * k} k={k} text={`${fmtNum(L)}${e.kind === 'wall' ? ` × ${fmtNum(e.thickness)}` : ''} מ' · גובה ${fmtNum(e.height)} · ${tag}`} />
+          // קירות הבית אחרונים בעדיפות: מוצגים רק כשיש להם מקום פנוי
+          if (!sel && (L < 1 || (e.kind === 'wall' && e.scope === 'house' && L < 2.5))) return null
+          const off = (e.kind === 'wall' ? e.thickness / 2 : 0) + k * 14
+          const ang = Math.atan2(e.y2 - e.y1, e.x2 - e.x1)
+          const nx = -Math.sin(ang) * (off + k * 9)
+          const ny = Math.cos(ang) * (off + k * 9)
+          const x = (e.x1 + e.x2) / 2 + nx
+          const y = (e.y1 + e.y2) / 2 + ny
+          let rot = (ang * 180) / Math.PI
+          if (rot > 90) rot -= 180
+          if (rot < -90) rot += 180
+          const wl = [`${fmtNum(L)} מ'`, `גובה ${fmtNum(e.height)} · ${tag}`]
+          if (!free(e.id, x, y, wl, rot)) return null
+          const color = sel ? '#b0522d' : DIM
+          return (
+            <g key={e.id}>
+              <OffsetDim a={{ x: e.x1, y: e.y1 }} b={{ x: e.x2, y: e.y2 }} off={off} k={k} color={color} />
+              <Tag2 x={x} y={y} k={k} rot={rot} lines={wl} color={color} sel={sel} onPick={pick} />
+            </g>
+          )
         }
         if (e.kind === 'surface') {
           const c = e.poly ? e.poly.reduce((a, p) => ({ x: a.x + p.x / e.poly!.length, y: a.y + p.y / e.poly!.length }), { x: 0, y: 0 }) : { x: e.x + e.w / 2, y: e.y + e.d / 2 }
+          const lvl = `${e.level >= 0 ? '+' : ''}${fmtNum(e.level)}`
+          const sl = [`${fmtNum(surfaceArea(e))} מ"ר`, `${fmtNum(e.w)}×${fmtNum(e.d)} · מפלס ${lvl}`, tag]
+          if (!sel && surfaceArea(e) < 2) return null
+          if (!free(e.id, c.x, c.y, sl)) return null
           return (
             <g key={e.id}>
-              <Txt x={c.x} y={c.y - fs * k * 0.6} k={k} text={`${fmtNum(surfaceArea(e))} מ"ר · ${tag}`} color="#2f5d4a" />
-              <Txt x={c.x} y={c.y + fs * k * 0.7} k={k} text={`${fmtNum(e.w)} × ${fmtNum(e.d)} מ' · מפלס ${e.level >= 0 ? '+' : ''}${fmtNum(e.level)}`} color="#48546b" size={10} />
+              {sel && <rect x={e.x} y={e.y} width={e.w} height={e.d} fill="none" stroke="#b0522d" strokeWidth={k * 1.2} strokeDasharray={`${k * 5} ${k * 3}`} pointerEvents="none" />}
+              {sel && <OffsetDim a={{ x: e.x, y: e.y }} b={{ x: e.x + e.w, y: e.y }} off={-k * 12} k={k} color="#b0522d" />}
+              {sel && <OffsetDim a={{ x: e.x + e.w, y: e.y }} b={{ x: e.x + e.w, y: e.y + e.d }} off={-k * 12} k={k} color="#b0522d" />}
+              <Tag2 x={c.x} y={c.y} k={k} lines={sl} color="#2f5d4a" sel={sel} onPick={pick} />
             </g>
           )
         }
         if (e.kind === 'line') {
           const m = e.pts[Math.floor(e.pts.length / 2)]
-          return m ? <Txt key={e.id} x={m.x} y={m.y - fs * k} k={k} text={`${fmtNum(polyLength(e.pts))} × ${fmtNum(e.width)} מ'${e.type !== 'path' ? ` · גובה ${fmtNum(e.height)}` : ''} · ${tag}`} color="#2f5d4a" /> : null
+          const ll = [`${fmtNum(polyLength(e.pts))} מ'`, `${e.type === 'path' ? `רוחב ${fmtNum(e.width)}` : `גובה ${fmtNum(e.height)}`} · ${tag}`]
+          if (!m || !free(e.id, m.x, m.y - k * 16, ll)) return null
+          return <Tag2 key={e.id} x={m.x} y={m.y - k * 16} k={k} lines={ll} color="#2f5d4a" sel={sel} onPick={pick} />
         }
-        if (e.kind === 'object') return <Txt key={e.id} x={e.x} y={e.y + e.d / 2 + fs * k} k={k} text={`${fmtNum(e.w)} × ${fmtNum(e.d)} · גובה ${fmtNum(e.h)} · ${tag}`} color="#48546b" />
+        if (e.kind === 'object') {
+          const y = e.y + e.d / 2 + k * 16
+          const ol = [`${fmtNum(e.w)}×${fmtNum(e.d)}`, `גובה ${fmtNum(e.h)} · ${tag}`]
+          if (!free(e.id, e.x, y + k * 6, ol)) return null
+          return (
+            <g key={e.id}>
+              <OffsetDim a={{ x: e.x - e.w / 2, y: e.y + e.d / 2 }} b={{ x: e.x + e.w / 2, y: e.y + e.d / 2 }} off={k * 5} k={k} color={sel ? '#b0522d' : '#48546b'} />
+              <Tag2 x={e.x} y={y + k * 6} k={k} lines={ol} color="#48546b" sel={sel} onPick={pick} />
+            </g>
+          )
+        }
         return null
       })}
     </g>

@@ -16,6 +16,7 @@ import { boundsOf, elementPoints, handlePoints, setVertex, mergeSameMaterial, mo
 import { IconBtn } from '../components/EditIcons'
 import { PLAN_FINISH, useFinish, type PlanFinish } from '../lib/finish'
 import { PageIntro } from '../components/PageIntro'
+import { RequirementsSummary } from '../components/VariantContext'
 import { textureUrl } from '../lib/textures'
 import { ElementEditor, approvedLabel } from '../components/ElementEditor'
 import { GardenPalette, type Group, type Tool } from '../components/GardenPalette'
@@ -749,6 +750,15 @@ export default function PlanTab() {
     setTool('select')
   }
 
+  // אישור כל האלמנטים בבת אחת, אחרי שבדקו את המינימום (קנה מידה, קירות ופתחים), כדי לראות את גודל הפרויקט ואת הפרופורציות
+  const approveEverything = () => {
+    const lab = approvedLabel(project)
+    updateVariant(project.id, (v) => ({
+      ...v,
+      elements: v.elements.map((e) => (e.kind !== 'sketch' && !e.approved ? { ...e, approved: true, label: (e.kind === 'wall' || e.kind === 'opening') && e.label === 'estimated' ? lab : e.label } : e)),
+    }))
+    toast('כל האלמנטים אושרו. אפשר לבטל ב-Ctrl+Z')
+  }
   const approveAll = () => {
     const lab = approvedLabel(project)
     updateVariant(project.id, (v) => ({
@@ -800,6 +810,7 @@ export default function PlanTab() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 8)
   const pendingCount = variant.elements.filter((e) => !e.approved && (e.kind === 'wall' || e.kind === 'opening')).length
+  const pendingAll = variant.elements.filter((e) => !e.approved && e.kind !== 'sketch').length
   const k = view.w / 900
   const movingIds = new Set(moving?.els.map((x) => x.id) ?? [])
   const shown = variant.elements.map((e) => (moving && movingIds.has(e.id) ? moveElement(e, moving.dx, moving.dy) : vdrag && vdrag.el.id === e.id ? setVertex(e, vdrag.idx, vdrag.p) : e))
@@ -1019,7 +1030,7 @@ export default function PlanTab() {
             ) : (
               <line x1={pending.x} y1={pending.y} x2={hover.x} y2={hover.y} stroke="#2f5d4a" strokeWidth={k * 3} strokeDasharray={`${k * 5} ${k * 3}`} />
             ))}
-            {hasBasis && showDims && dimMode === 'elements' && <DimsElements elements={shown.filter((e) => e.id !== selId)} k={k} />}
+            {hasBasis && showDims && dimMode === 'elements' && <DimsElements elements={shown.filter((e) => e.id !== selId)} k={k} selected={selected?.id ?? null} onPick={(id) => select(id)} />}
             {hasBasis && showDims && dimMode === 'chains' && <DimsChains elements={shown} k={k} />}
             {hasBasis && showDims && dimMode === 'between' && selected && !isMulti && <DimsBetween el={shown.find((x) => x.id === selected.id) ?? selected} elements={shown} k={k} />}
             {hasBasis && showDims && dimMode === 'measure' && <MeasureDraw pts={measurePts} hover={measurePts.length ? hover : null} k={k} />}
@@ -1144,6 +1155,9 @@ export default function PlanTab() {
         </div>
 
         <aside className="side">
+          <div className="card flat side-req">
+            <RequirementsSummary project={project} variant={variant} />
+          </div>
           {insightsList.length > 0 && (
             <div className="card flat insights-card" data-testid="planner-insights">
               <b>תובנות למתכנן</b>
@@ -1237,11 +1251,18 @@ export default function PlanTab() {
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
               <div className="h-section">אלמנטים ({variant.elements.length})</div>
-              {pendingCount > 0 && (
-                <button className="btn small primary" onClick={approveAll}>
-                  אישור כל הקירות והפתחים ({pendingCount})
-                </button>
-              )}
+              <div className="row" style={{ gap: 6 }}>
+                {pendingCount > 0 && (
+                  <button className="btn small primary" onClick={approveAll}>
+                    אישור כל הקירות והפתחים ({pendingCount})
+                  </button>
+                )}
+                {pendingAll > 0 && (
+                  <button className="btn small" onClick={approveEverything} data-testid="approve-everything" title="אחרי בדיקת קנה המידה, הקירות והפתחים: אישור כל השאר בבת אחת">
+                    אישור כל האלמנטים ({pendingAll})
+                  </button>
+                )}
+              </div>
             </div>
             {variant.elements.length === 0 ? (
               <div className="muted" style={{ fontSize: 14 }}>

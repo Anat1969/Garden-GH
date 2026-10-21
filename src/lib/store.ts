@@ -33,6 +33,8 @@ function readLS<T>(key: string, fallback: T): T {
   }
 }
 
+import { describeChange } from './changes'
+
 export const MAIN_VARIANT = 'חלופה ראשית'
 
 // שמות ישנים: "בסיס" היה שם החלופה הראשונה
@@ -187,7 +189,13 @@ export function updateVariant(projectId: string, fn: (v: Variant) => Variant, co
   if (cur) pushHistory(cur, coalesce)
   updateProject(projectId, (p) => ({
     ...p,
-    variants: p.variants.map((v) => (v.id === p.activeVariantId ? fn(v) : v)),
+    variants: p.variants.map((v) => {
+      if (v.id !== p.activeVariantId) return v
+      const nv = fn(v)
+      // השינוי התכנוני האחרון נרשם בחלופה
+      const text = nv.elements !== v.elements ? describeChange(v.elements, nv.elements) : nv.requirements !== v.requirements ? 'עודכנו הדרישות' : null
+      return text ? { ...nv, lastChange: { at: new Date().toISOString(), text } } : nv
+    }),
   }))
 }
 
@@ -208,7 +216,8 @@ function swapHistory(projectId: string, from: Map<string, Element[][]>, to: Map<
   stack.push(activeVariant(p).elements)
   to.set(key, stack)
   lastPush = { key: '', at: 0 }
-  updateProject(projectId, (x) => ({ ...x, variants: x.variants.map((v) => (v.id === x.activeVariantId ? { ...v, elements: prev } : v)) }))
+  const text = from === undoStack ? 'בוטלה פעולה' : 'שוחזרה פעולה'
+  updateProject(projectId, (x) => ({ ...x, variants: x.variants.map((v) => (v.id === x.activeVariantId ? { ...v, elements: prev, lastChange: { at: new Date().toISOString(), text } } : v)) }))
   return true
 }
 export const undo = (projectId: string) => swapHistory(projectId, undoStack, redoStack)

@@ -1,4 +1,5 @@
 // מפרויקט באפליקציה למודל הגיליון: קומת הקרקע והגינה בתוכנית, הבית והגינה בתלת-ממד, חומרים מהמשטחים בשימוש.
+import { stairPlan } from '../stairs'
 import type { GardenObject, Opening, Project, Surface, Wall } from '../types'
 import { activeVariant } from '../store'
 import { MATERIALS, type SurfaceMaterial } from '../garden'
@@ -135,12 +136,17 @@ export function fromProject(p: Project, o: SheetOverrides = {}): SheetModel {
     volumes: [
       ...fps.flatMap((f) => Array.from({ length: storeys }, (_, i) => ({ poly: f, z0: i * groundH, z1: (i + 1) * groundH, role: 'envelope' as const }))),
       ...fps.map((f) => ({ poly: f, z0: top, z1: top + 0.25, role: 'roof' as const })),
+      // מדרגות: כל שלח כגוש מהמפלס התחתון עד גובהו
+      ...surfaces.flatMap((sf) => {
+        const sp = sf.stairs ? stairPlan(sf) : null
+        return sp ? sp.steps.map((st) => ({ poly: st.poly, z0: sp.bottom, z1: st.top, role: 'slab' as const })) : []
+      }),
     ],
     glass: planOpenings.map((op, i) => {
       const src = openings[i]
       return { a: op.a, b: op.b, z0: src?.sill ?? 0, z1: (src?.sill ?? 0) + (src?.height ?? 2.1), type: op.type }
     }),
-    ground: surfaces.map((s) => ({ poly: surfPoly(s), color: s.color || MATERIALS[s.material].color, z: s.level, name: MATERIALS[s.material].text })),
+    ground: surfaces.filter((s) => !s.stairs).map((s) => ({ poly: surfPoly(s), color: s.color || MATERIALS[s.material].color, z: s.level, name: MATERIALS[s.material].text })),
     trees,
     north: p.north || 0,
     colors: { envelope: '#d2ccbf', roof: '#b9b4aa', glass: '#9fb4bd', ground: '#7d8a52', frame: '#3a3a3a' },

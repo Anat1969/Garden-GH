@@ -4,6 +4,7 @@ import { useProject } from './ProjectLayout'
 import { updateProject, updateVariant } from '../lib/store'
 import { CheckGroup, Field, NumField, Tag, toast } from '../components/ui'
 import { PageIntro } from '../components/PageIntro'
+import { MapLocator } from '../components/MapLocator'
 import { IconBtn } from '../components/EditIcons'
 import { NO_BASIS, fmtNum, hasBasis } from '../lib/bom'
 import { FUNCTIONS, defaultZones } from '../lib/designer'
@@ -162,6 +163,8 @@ export default function Overview() {
           ניקוז לבית: דורש מהנדס מוסמך.
         </div>
       </section>
+
+      <MapLocator project={project} />
 
       <section className="card">
         <h3 className="h-section" style={{ margin: '0 0 4px' }}>

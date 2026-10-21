@@ -44,6 +44,104 @@ export function Label3D({ text, position, size = 0.32, color = '#1d2120', bg = '
   )
 }
 
+// ---------- טקסט שוכב על הקרקע: מידה שמחוברת למה שהיא מודדת, בקנה המידה של המודל ----------
+// angle: זווית הקו בתוכנית (רדיאנים, x מזרחה, y דרומה). size: גובה השורה הראשונה במטרים.
+
+export function FlatText({ lines, at, angle = 0, size, color = '#1d2120', bg = 'rgba(255,255,255,0.9)', border, onClick }: { lines: string[]; at: [number, number, number]; angle?: number; size: number; color?: string; bg?: string; border?: string; onClick?: () => void }) {
+  const { tex, aspect, h } = useMemo(() => {
+    const c = document.createElement('canvas')
+    const ctx = c.getContext('2d')!
+    const fs = 48
+    const fs2 = 34
+    const font1 = `600 ${fs}px "IBM Plex Sans Hebrew", sans-serif`
+    const font2 = `400 ${fs2}px "IBM Plex Sans Hebrew", sans-serif`
+    ctx.font = font1
+    let w = ctx.measureText(lines[0]).width
+    ctx.font = font2
+    for (const l of lines.slice(1)) w = Math.max(w, ctx.measureText(l).width)
+    c.width = Math.ceil(w) + 32
+    c.height = fs + 20 + (lines.length - 1) * (fs2 + 8)
+    ctx.fillStyle = bg
+    ctx.beginPath()
+    ctx.roundRect(0, 0, c.width, c.height, 12)
+    ctx.fill()
+    if (border) {
+      ctx.strokeStyle = border
+      ctx.lineWidth = 5
+      ctx.stroke()
+    }
+    ctx.direction = 'rtl'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = color
+    ctx.font = font1
+    ctx.fillText(lines[0], c.width / 2, fs / 2 + 11)
+    ctx.font = font2
+    ctx.globalAlpha = 0.8
+    lines.slice(1).forEach((l, i) => ctx.fillText(l, c.width / 2, fs + 14 + i * (fs2 + 8) + fs2 / 2))
+    const t = new THREE.CanvasTexture(c)
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 4
+    return { tex: t, aspect: c.width / c.height, h: c.height / (fs + 20) }
+  }, [lines.join('|'), color, bg, border]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => tex.dispose(), [tex])
+  // קריאות: הטקסט לא הפוך. זווית בין -90 ל-90 מעלות
+  let a = angle
+  if (a > Math.PI / 2) a -= Math.PI
+  if (a < -Math.PI / 2) a += Math.PI
+  const H = size * h
+  return (
+    <mesh
+      position={at}
+      rotation={[-Math.PI / 2, 0, -a]}
+      renderOrder={8}
+      onClick={
+        onClick
+          ? (ev: ThreeEvent<MouseEvent>) => {
+              ev.stopPropagation()
+              onClick()
+            }
+          : undefined
+      }
+      onPointerOver={onClick ? () => (document.body.style.cursor = 'pointer') : undefined}
+      onPointerOut={onClick ? () => (document.body.style.cursor = '') : undefined}
+    >
+      <planeGeometry args={[H * aspect, H]} />
+      <meshBasicMaterial map={tex} transparent depthWrite={false} polygonOffset polygonOffsetFactor={-4} />
+    </mesh>
+  )
+}
+
+// קו מידה על הקרקע: קו, שנתות בקצוות וקווי עזר אל הנקודות שנמדדו
+export function GroundDim({ a, b, y, off, color = '#3b5d7a', width = 1 }: { a: { x: number; y: number }; b: { x: number; y: number }; y: number; off: number; color?: string; width?: number }) {
+  const geom = useMemo(() => {
+    const L = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const ux = (b.x - a.x) / L
+    const uy = (b.y - a.y) / L
+    const nx = -uy * off
+    const ny = ux * off
+    const t = Math.min(0.18, L * 0.05)
+    const A = { x: a.x + nx, y: a.y + ny }
+    const B = { x: b.x + nx, y: b.y + ny }
+    const seg = [
+      A.x, y, A.y, B.x, y, B.y,
+      a.x + nx * 0.15, y, a.y + ny * 0.15, A.x + nx * 0.25, y, A.y + ny * 0.25,
+      b.x + nx * 0.15, y, b.y + ny * 0.15, B.x + nx * 0.25, y, B.y + ny * 0.25,
+      A.x - (ux - uy) * t, y, A.y - (uy + ux) * t, A.x + (ux - uy) * t, y, A.y + (uy + ux) * t,
+      B.x - (ux - uy) * t, y, B.y - (uy + ux) * t, B.x + (ux - uy) * t, y, B.y + (uy + ux) * t,
+    ]
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3))
+    return g
+  }, [a.x, a.y, b.x, b.y, y, off])
+  useEffect(() => () => geom.dispose(), [geom])
+  return (
+    <lineSegments geometry={geom} renderOrder={7}>
+      <lineBasicMaterial color={color} linewidth={width} transparent opacity={0.95} />
+    </lineSegments>
+  )
+}
+
 // ---------- משטח מצולע ----------
 
 export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {

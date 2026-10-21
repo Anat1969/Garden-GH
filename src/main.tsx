@@ -5,6 +5,7 @@ import App from './App'
 import './styles.css'
 import { addProject, deleteProject, getState, initAuth, mergeDuplicateProjects } from './lib/store'
 import { buildShaniProject, SHANI_FLAG } from './data/shaniProject'
+import { runMigrations } from './lib/migrate'
 
 void initAuth()
 
@@ -24,6 +25,12 @@ try {
 
 // פרויקטים כפולים מגרסאות קודמות מתאחדים לפי כתובת
 mergeDuplicateProjects()
+// שדרוג פרויקטים קיימים: מדרגות מההיתר בכל החלופות
+try {
+  runMigrations()
+} catch (e) {
+  console.warn(e)
+}
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

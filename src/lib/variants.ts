@@ -3,6 +3,7 @@ import type { Project, Variant, Wall } from './types'
 import { STYLES, type StyleGuide } from '../data/gardenGuide'
 import { FUNCTIONS, defaultZones, designGarden, type FunctionId } from './designer'
 import { newVariant, uid, updateProject } from './store'
+import { isStructural } from './reset'
 
 export type Budget = 'low' | 'mid' | 'high'
 
@@ -38,6 +39,7 @@ export function makeDesignVariant(base: Variant, style: StyleGuide, fns: Functio
   v.elements = [...v.elements.filter((e) => !ids.has(e.id)), ...res.elements]
   v.requirements = { ...v.requirements, style: style.id }
   v.note = `נוצרה אוטומטית בסגנון ${style.name}.`
+  v.lastChange = { at: new Date().toISOString(), text: `תכנון אוטומטי בסגנון ${style.name}` }
   return { variant: v, notes: res.notes }
 }
 
@@ -59,8 +61,9 @@ export function addVariants(projectId: string, list: Variant[], activate = true)
 // חלופה ריקה: רק הבית, הפתחים וגבול המגרש. הגינה מתוכננת מאפס
 export function makeBlankVariant(p: Project, base: Variant): Variant {
   const v = newVariant('תכנון מאפס', base)
-  v.elements = v.elements.filter((e) => (e.kind === 'wall' && e.scope === 'house') || e.kind === 'opening' || (e.kind === 'fence' && e.boundary))
+  v.elements = v.elements.filter(isStructural)
   v.assignments = {}
   v.note = `חלופה ריקה לתכנון ידני מאפס, על בסיס הבית של ${p.name}.`
+  v.lastChange = { at: new Date().toISOString(), text: 'נוצרה חלופה ריקה לתכנון מאפס' }
   return v
 }

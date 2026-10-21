@@ -696,3 +696,90 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
 .spot-part>span:first-child{color:var(--muted,#6b706d)}
 .fit-bar{display:inline-block;width:40px;height:5px;border-radius:3px;background:#e8e5dd;overflow:hidden}
 .fit-bar>i{display:block;height:100%;border-radius:3px}
+
+/* ראש הפרויקט: שם הפרויקט וליד החלופה הפעילה */
+.project-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.variant-switch{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 6px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff);box-shadow:var(--shadow-1,0 1px 2px rgba(0,0,0,.05));max-width:100%}
+.variant-no{display:grid;line-height:1.15;padding:4px 10px;border-radius:8px;background:var(--accent,#2f5d4a);color:#fff;text-align:center;flex:0 0 auto}
+.variant-no b{font-size:14px}
+.variant-no span{font-size:11px;opacity:.8}
+.variant-select{min-width:0;max-width:260px;font-weight:600}
+.variant-switch .input{height:36px}
+/* רצועת ההקשר: תוכנית, דרישות, שינוי אחרון */
+.context-strip{display:grid;grid-template-columns:150px minmax(0,1fr) minmax(0,220px);gap:16px;align-items:center;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,#fbfaf7,#f5f3ee)}
+.ctx-plan .plan-thumb{aspect-ratio:4/3}
+.plan-thumb.clickable{cursor:pointer}
+.plan-thumb.clickable:hover{box-shadow:var(--shadow-2);transform:translateY(-1px)}
+.plan-thumb.clickable:focus-visible{outline:2px solid var(--accent,#2f5d4a);outline-offset:2px}
+.req-summary{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:13px;min-width:0}
+.req-summary .req-title{font-size:13px;width:100%}
+.req-summary ul{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none;min-width:0}
+.req-summary li{padding:3px 9px;border-radius:999px;background:#fff;border:1px solid var(--line);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.req-summary li span{color:var(--muted,#6b706d)}
+.req-summary .req-edit{font-size:12px}
+.req-summary.compact{font-size:12px}
+.ctx-last{display:grid;gap:2px;font-size:12px;color:var(--muted,#6b706d);border-inline-start:1px solid var(--line);padding-inline-start:14px}
+.ctx-last b{color:#1d2120;font-size:12px}
+@media (max-width:760px){
+  .context-strip{grid-template-columns:96px minmax(0,1fr);gap:10px}
+  .ctx-last{grid-column:1 / -1;border:none;padding:0}
+  .variant-switch{width:100%}
+  .variant-select{flex:1}
+}
+
+/* דף החלופות */
+.variant-focus{display:grid;gap:12px}
+.variant-views{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.variant-views figure{margin:0;display:grid;gap:6px}
+.variant-views figcaption{font-size:12px;color:var(--muted,#6b706d)}
+.variant-views .plan-thumb{aspect-ratio:3/2}
+.render-btn{all:unset;cursor:pointer;display:block;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.render-btn:focus-visible{outline:2px solid var(--accent,#2f5d4a);outline-offset:2px}
+.variant-render{display:block;width:100%;aspect-ratio:3/2;object-fit:cover;background:#f5f2eb}
+.variant-render.empty{display:grid;place-items:center;color:var(--muted,#6b706d);font-size:13px}
+.variant-why ul,.variant-why-list{margin:6px 0 0;padding-inline-start:18px;font-size:13px;display:grid;gap:3px}
+.variant-card.active{outline:2px solid var(--accent,#2f5d4a)}
+.variant-card .plan-thumb{margin-top:8px}
+@media (max-width:760px){.variant-views{grid-template-columns:minmax(0,1fr)}}
+
+/* תכנון: בחירת משטח בתוכנית, סגנונות ותצוגה מקדימה */
+.paths button.path-card{all:unset;box-sizing:border-box;cursor:pointer;display:grid;gap:4px}
+.paths button.path-card{padding:16px 18px;border-radius:var(--radius,14px);border:1px solid var(--line);background:var(--card,#fff)}
+.paths button.path-card.on{outline:2px solid var(--accent,#2f5d4a);background:linear-gradient(180deg,#fff,#f3f6f3)}
+.paths button.path-card:focus-visible{outline:2px solid var(--accent,#2f5d4a);outline-offset:2px}
+.design-board{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.zone-picker{border:1px solid var(--line);border-radius:12px;overflow:hidden;background-color:#f7f6f2;background-image:linear-gradient(rgba(0,0,0,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.035) 1px,transparent 1px);background-size:16px 16px}
+.zone-picker svg{display:block;width:100%;height:auto;max-height:520px}
+.zone-picker.empty{padding:30px;text-align:center;color:var(--muted)}
+.zone-hint{padding:8px 12px;font-size:13px;border-top:1px solid var(--line);background:#fff}
+.style-grid.compact{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.style-grid.compact .style-card .muted{font-size:12px}
+.preview-box{display:grid;gap:2px;margin-top:12px;padding:10px 12px;border-radius:10px;border:1px dashed var(--accent,#2f5d4a);background:#f3f6f3;font-size:13px}
+@media (max-width:900px){.design-board{grid-template-columns:minmax(0,1fr)}}
+.dim-tag:hover rect{stroke-opacity:1}
+
+/* מיקום הפרויקט על המפה */
+.map-wrap{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.map-box{width:100%;height:380px;border:0;display:block}
+.map-iframe{position:absolute;inset:0;height:100%}
+.map-pin{display:grid;place-items:center}
+.map-pin i{display:block;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:radial-gradient(circle,#b0522d 0 4px,rgba(176,82,45,.35) 5px);box-shadow:0 0 0 1px #b0522d,0 2px 6px rgba(0,0,0,.35)}
+.map-hits{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.map-foot{display:grid;gap:8px;margin-top:10px}
+.map-status{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px}
+.map-status span{color:var(--muted,#6b706d)}
+.leaflet-container{font-family:inherit}
+@media (max-width:640px){.map-box{height:300px}}
+
+/* תמונות ממבטים: לפני ואחרי */
+.view-shots{display:grid;gap:12px}
+.shot-steps{font-size:13px;margin:0}
+.shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:14px}
+.shot-card{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fbfaf7}
+.shot-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.shot-pair figure{margin:0;display:grid;gap:4px}
+.shot-pair figcaption{font-size:12px;color:var(--muted,#6b706d)}
+.shot-img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#f1efe9}
+.shot-img.empty{display:grid;place-items:center;font-size:12px;color:var(--muted)}
+.shot-prompt summary{cursor:pointer;font-size:13px}
+.shot-prompt pre{white-space:pre-wrap;font-family:inherit;font-size:13px;margin:6px 0 0;padding:10px;background:#fff;border:1px solid var(--line);border-radius:8px}

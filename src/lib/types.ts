@@ -295,6 +295,7 @@ export interface Variant {
   elements: Element[]
   requirements: Requirements
   assignments: Record<string, string>
+  lastChange?: { at: string; text: string } // השינוי התכנוני האחרון
 }
 
 // מסמך מצורף לפרויקט: כל סוג קובץ. הקובץ עצמו נשמר במכשיר (IndexedDB), כאן רק הפרטים
@@ -339,6 +340,7 @@ export interface Project {
   activeVariantId: string
   createdAt: string
   updatedAt: string
+  location?: ProjectLocation // מיקום על המפה: מכתובת, מדקירה או מקואורדינטות
 }
 
 export interface PriceItem {
@@ -359,4 +361,12 @@ export const UNIT_TEXT: Record<Unit, string> = {
   m: 'מ"א',
   m3: 'מ"ק',
   unit: 'יח\'',
+}
+
+export interface ProjectLocation {
+  lat: number
+  lon: number
+  zoom: number
+  source: 'address' | 'pin' | 'manual'
+  label?: string // הכתובת שנמצאה
 }

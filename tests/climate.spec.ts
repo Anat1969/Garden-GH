@@ -54,7 +54,7 @@ test('אקלים במודל: שמש וצל, רוח, נוחות לישיבה, צ�
   await page.screenshot({ path: 'shots/84-comfort.png' })
 
   // צפון: כשאין כיוון ידוע, האפליקציה שואלת
-  await page.getByRole('button', { name: 'שינוי' }).click()
+  await page.getByRole('button', { name: 'שינוי', exact: true }).first().click()
   await expect(page.getByTestId('north-ask')).toBeVisible()
   await page.getByTestId('north-ask').getByRole('button', { name: 'ימינה' }).click()
   await page.getByTestId('north-confirm').click()
