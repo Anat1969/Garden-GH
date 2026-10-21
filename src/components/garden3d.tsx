@@ -6,6 +6,7 @@ import type { GardenLine, GardenObject, Pt, Sketch, SurfaceMaterial } from '../l
 import { LINES, MATERIALS, OBJECTS } from '../lib/garden'
 import { textureCanvas } from '../lib/textures'
 import { useModelFinish } from '../lib/finish'
+import { RealCrown, RealPalm, RealSurfMat, RealTrunk } from './realism3d'
 
 const SEL = '#2f5d4a'
 
@@ -42,7 +43,7 @@ export function SurfMat({ material, color, selected, tex }: { material: SurfaceM
   if (selected) return <meshStandardMaterial color={SEL} emissive={SEL} emissiveIntensity={0.3} roughness={0.95} />
   if (finish === 'massing') return <meshStandardMaterial color="#e4e4e0" roughness={1} />
   if (finish === 'color') return <meshStandardMaterial color={color || MATERIALS[material].color} roughness={material === 'water' ? 0.2 : 0.95} />
-  return <meshStandardMaterial map={tex} roughness={material === 'water' ? 0.15 : 0.95} />
+  return <RealSurfMat material={material} color={color} repeat={[tex.repeat.x, tex.repeat.y]} />
 }
 
 // ---------- פריט נקודתי ----------
@@ -54,6 +55,58 @@ export function GardenObjectMesh({ o, selected, onSelect }: { o: GardenObject; s
   const r = Math.max(w, d) / 2
   const onClick = pick(o.id, onSelect)
   let body: JSX.Element
+  const real = useModelFinish() === 'detailed' && !selected
+  switch (real ? o.type : '_') {
+    case 'tree':
+    case 'fruit_tree': {
+      const trunk = Math.max(0.6, h - r * 1.4)
+      const cr = Math.min(r, h / 2)
+      body = (
+        <>
+          <RealTrunk h={trunk + cr * 0.4} />
+          <group position={[0, trunk + cr * 0.8, 0]}>
+            <RealCrown r={cr} color={c} seed={o.id.length} flat={Math.min(1, (h - trunk) / (cr * 1.6) || 1)} />
+          </group>
+          {o.type === 'fruit_tree' &&
+            [0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <mesh key={i} position={[Math.cos(i * 0.8) * cr * 0.9, trunk + cr * 0.6 + (i % 3) * cr * 0.25, Math.sin(i * 0.8) * cr * 0.9]} castShadow>
+                <sphereGeometry args={[0.06, 10, 8]} />
+                <meshStandardMaterial color="#e08a2c" roughness={0.5} />
+              </mesh>
+            ))}
+        </>
+      )
+      return (
+        <group position={[o.x, o.level, o.y]} rotation={[0, (-o.rot * Math.PI) / 180, 0]} onClick={onClick}>
+          {body}
+        </group>
+      )
+    }
+    case 'palm':
+      return (
+        <group position={[o.x, o.level, o.y]} rotation={[0, (-o.rot * Math.PI) / 180, 0]} onClick={onClick}>
+          <RealPalm h={h} r={r} color={c} />
+        </group>
+      )
+    case 'shrub':
+    case 'flowers':
+      return (
+        <group position={[o.x, o.level + h * 0.45, o.y]} rotation={[0, (-o.rot * Math.PI) / 180, 0]} onClick={onClick}>
+          <group scale={[w / 2 / Math.max(w, d) * 2, 1, d / 2 / Math.max(w, d) * 2]}>
+            <RealCrown r={Math.max(w, d) / 2} color={c} seed={o.id.length + 3} flat={Math.min(1.2, h / Math.max(w, d))} />
+          </group>
+          {o.type === 'flowers' &&
+            Array.from({ length: 14 }, (_, i) => (
+              <mesh key={i} position={[Math.cos(i * 2.4) * w * 0.32 * ((i % 4) / 4 + 0.4), h * 0.42, Math.sin(i * 2.4) * d * 0.32 * ((i % 4) / 4 + 0.4)]}>
+                <sphereGeometry args={[0.035, 8, 6]} />
+                <meshStandardMaterial color={i % 3 ? '#f3f0ea' : '#e4b84a'} roughness={0.6} />
+              </mesh>
+            ))}
+        </group>
+      )
+    default:
+      break
+  }
   switch (o.type) {
     case 'tree':
     case 'fruit_tree': {

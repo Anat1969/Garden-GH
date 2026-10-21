@@ -20,9 +20,15 @@ import { Tag } from '../components/ui'
 import { IconBtn } from '../components/EditIcons'
 import { buildHouse, type BuildResult } from '../lib/buildHouse'
 import { PageIntro } from '../components/PageIntro'
+import { ClimateInsights, ClimatePanel, useClimateData, useClimateState, dirText, type ClimateData, type ClimateLayer } from '../components/ClimatePanel'
+import { HeatLayer, SeatSpots, SunLight, SunPath, WindArrow, WindParticles, sunVector } from '../components/climate3d'
+import { Atmosphere, GlassMat, GrassField, NatureGround, OpeningFrame, PlasterMat, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
+import { woodPBR } from '../lib/realism'
+import { fmtHour } from '../lib/sun'
+import * as THREE from 'three'
 
 function Controls({ target, dist, focus }: { target: [number, number, number]; dist: number; focus: { at: [number, number, number]; key: number } | null }) {
-  const { camera, gl } = useThree()
+  const { camera, gl, invalidate } = useThree()
   const ref = useRef<OrbitImpl | null>(null)
   // מיקוד על אלמנט שנבחר מהרשימה: המצלמה מתקרבת אליו ושומרת על כיוון המבט
   useEffect(() => {
@@ -34,6 +40,7 @@ function Controls({ target, dist, focus }: { target: [number, number, number]; d
     c.target.set(...focus.at)
     camera.position.set(focus.at[0] + dir.x * d, focus.at[1] + dir.y * d, focus.at[2] + dir.z * d)
     c.update()
+    invalidate()
   }, [focus?.key]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const c = new OrbitImpl(camera, gl.domElement)
@@ -43,6 +50,10 @@ function Controls({ target, dist, focus }: { target: [number, number, number]; d
     camera.position.set(target[0] + dist * 0.7, dist * 0.75, target[2] + dist * 0.9)
     c.update()
     ref.current = c
+    // מצייר רק כשהמצלמה זזה (כולל ההאטה של הסיבוב)
+    const onChange = () => invalidate()
+    c.addEventListener('change', onChange)
+    invalidate()
     let raf = 0
     const loop = () => {
       c.update()
@@ -51,6 +62,7 @@ function Controls({ target, dist, focus }: { target: [number, number, number]; d
     loop()
     return () => {
       cancelAnimationFrame(raf)
+      c.removeEventListener('change', onChange)
       c.dispose()
     }
   }, [camera, gl, target[0], target[2], dist]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -105,29 +117,59 @@ function WallMesh({ w, openings, selected, onSelect }: { w: Wall; openings: Open
   const sel = selected === w.id
   const finish = useModelFinish()
   const color = w.scope === 'garden' ? (finish === 'massing' ? '#cfd0cc' : '#a99c86') : '#bdbfbb'
+  const real = finish === 'detailed'
   return (
     <group position={[w.x1, 0, w.y1]} rotation={[0, -ang, 0]}>
       {wallPieces(w, openings).map((p, i) => (
         <mesh key={i} position={[(p.s + p.e) / 2, (p.y0 + p.y1) / 2, 0]} castShadow receiveShadow onClick={pick(w.id, onSelect)}>
           <boxGeometry args={[Math.max(0.001, p.e - p.s), Math.max(0.001, p.y1 - p.y0), Math.max(0.05, w.thickness)]} />
-          <meshStandardMaterial color={sel ? '#2f5d4a' : color} emissive={sel ? '#2f5d4a' : '#000000'} emissiveIntensity={sel ? 0.3 : 0} roughness={0.9} />
+          {real && !sel ? (
+            w.scope === 'house' ? <PlasterMat L={p.e - p.s} H={p.y1 - p.y0} /> : <StoneWallMat L={p.e - p.s} H={p.y1 - p.y0} />
+          ) : (
+            <meshStandardMaterial color={sel ? '#2f5d4a' : color} emissive={sel ? '#2f5d4a' : '#000000'} emissiveIntensity={sel ? 0.3 : 0} roughness={0.9} />
+          )}
         </mesh>
       ))}
       {openings
         .filter((o) => o.wallId === w.id)
-        .map((o) => (
-          <mesh key={o.id} position={[o.offset + o.width / 2, o.sill + o.height / 2, 0]} onClick={pick(o.id, onSelect)}>
-            <boxGeometry args={[o.width, o.height, o.type === 'window' ? 0.03 : 0.05]} />
-            <meshStandardMaterial
-              color={selected === o.id ? '#2f5d4a' : o.type === 'window' ? '#9fd0e0' : o.type === 'gate' ? '#6d5a86' : '#7a5a3a'}
-              transparent={o.type === 'window'}
-              opacity={o.type === 'window' ? 0.45 : 1}
-              roughness={0.3}
-            />
-          </mesh>
-        ))}
+        .map((o) =>
+          real && selected !== o.id ? (
+            <group key={o.id} position={[o.offset + o.width / 2, o.sill + o.height / 2, 0]} onClick={pick(o.id, onSelect)}>
+              <mesh>
+                <boxGeometry args={[o.width, o.height, o.type === 'window' ? 0.02 : 0.05]} />
+                {o.type === 'window' ? <GlassMat /> : o.type === 'gate' ? <meshStandardMaterial color="#2f3335" metalness={0.6} roughness={0.4} /> : <DoorMat w={o.width} h={o.height} />}
+              </mesh>
+              <OpeningFrame w={o.width} h={o.height} depth={Math.max(0.08, w.thickness * 0.5)} type={o.type} />
+            </group>
+          ) : (
+            <mesh key={o.id} position={[o.offset + o.width / 2, o.sill + o.height / 2, 0]} onClick={pick(o.id, onSelect)}>
+              <boxGeometry args={[o.width, o.height, o.type === 'window' ? 0.03 : 0.05]} />
+              <meshStandardMaterial
+                color={selected === o.id ? '#2f5d4a' : o.type === 'window' ? '#9fd0e0' : o.type === 'gate' ? '#6d5a86' : '#7a5a3a'}
+                transparent={o.type === 'window'}
+                opacity={o.type === 'window' ? 0.45 : 1}
+                roughness={0.3}
+              />
+            </mesh>
+          ),
+        )}
     </group>
   )
+}
+
+function DoorMat({ w, h }: { w: number; h: number }) {
+  const set = useMemo(() => {
+    const b = woodPBR()
+    const cl = (t: THREE.Texture) => {
+      const n = t.clone()
+      n.repeat.set(Math.max(0.3, w / 1.2), Math.max(0.3, h / 1.2))
+      n.rotation = Math.PI / 2
+      n.needsUpdate = true
+      return n
+    }
+    return { map: cl(b.map), normalMap: cl(b.normalMap) }
+  }, [w, h])
+  return <meshStandardMaterial map={set.map} normalMap={set.normalMap} roughness={0.55} />
 }
 
 function SurfaceMesh({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
@@ -143,19 +185,22 @@ function SurfaceMesh({ s, selected, onSelect }: { s: Surface; selected: boolean;
 }
 
 function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onSelect: (id: string) => void }) {
+  const real = useModelFinish() === 'detailed'
   const L = Math.hypot(f.x2 - f.x1, f.y2 - f.y1)
   const ang = Math.atan2(f.y2 - f.y1, f.x2 - f.x1)
   return (
     <group position={[f.x1, 0, f.y1]} rotation={[0, -ang, 0]}>
-      <mesh position={[L / 2, f.height / 2, 0]} castShadow onClick={pick(f.id, onSelect)}>
+      <mesh position={[L / 2, f.height / 2, 0]} castShadow receiveShadow onClick={pick(f.id, onSelect)}>
         <boxGeometry args={[L, f.height, 0.05]} />
-        <meshStandardMaterial color={selected ? '#2f5d4a' : '#6b4f36'} roughness={0.9} />
+        {real && !selected ? <RealSurfMat material="deck" color="#7d5c3e" repeat={[Math.max(0.3, L / 1.2), Math.max(0.3, f.height / 1.2)]} /> : <meshStandardMaterial color={selected ? '#2f5d4a' : '#6b4f36'} roughness={0.9} />}
       </mesh>
     </group>
   )
 }
 
-function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number }) {
+function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season }) {
+  const finish = useModelFinish()
+  const real = finish === 'detailed'
   const elements = useMemo(() => {
     const walls = dedupeWalls(rawElements.filter((e): e is Wall => e.kind === 'wall'))
     const ids = new Set(walls.map((w) => w.id))
@@ -184,15 +229,44 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
   const base = baseAbs(project)
   const surfaces = elements.filter((e): e is Surface => e.kind === 'surface')
   const levelAt = (x: number, y: number) => surfaces.find((sf) => sf.poly && pointInPoly({ x, y }, sf.poly))?.level ?? 0
+  // אור השמש האמיתי: בשכבת שמש ונוחות, ובגימור מפורט (שעה ועונה מהלוח)
+  const sunLit = real || layer === 'sun' || layer === 'comfort'
+  const center = { x: bounds.cx, y: bounds.cy }
+  const north = climate.site.north
+  const sunDir = useMemo(() => sunVector(climate.sun.az, Math.max(1, climate.sun.el), north), [climate.sun.az, climate.sun.el, north])
+  const g = climate.grid
   return (
     <>
-      <hemisphereLight args={['#ffffff', '#b8c4bb', 0.7]} />
-      <directionalLight position={[bounds.cx + bounds.size, bounds.size * 1.4, bounds.cy + bounds.size * 0.6]} intensity={1.6} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-left={-bounds.size} shadow-camera-right={bounds.size} shadow-camera-top={bounds.size} shadow-camera-bottom={-bounds.size} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, bounds.minL - 0.06, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
-        <planeGeometry args={[bounds.size * 4, bounds.size * 4]} />
-        <meshStandardMaterial color="#dfe3dc" roughness={1} />
-      </mesh>
-      <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, bounds.minL - 0.05, bounds.cy]} />
+      {sunLit ? (
+        <>
+          <hemisphereLight args={['#dfeaf5', '#b9b39f', real ? 0.35 : 0.55]} />
+          <SunLight center={center} size={bounds.size} az={climate.sun.az} el={climate.sun.el} north={north} intensity={real ? 2.6 : 2} />
+        </>
+      ) : (
+        <>
+          <hemisphereLight args={['#ffffff', '#b8c4bb', 0.7]} />
+          <directionalLight position={[bounds.cx + bounds.size, bounds.size * 1.4, bounds.cy + bounds.size * 0.6]} intensity={1.6} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-left={-bounds.size} shadow-camera-right={bounds.size} shadow-camera-top={bounds.size} shadow-camera-bottom={-bounds.size} />
+        </>
+      )}
+      {real && <Atmosphere center={center} size={bounds.size} sunDir={sunDir} />}
+      {real ? (
+        <NatureGround center={center} size={bounds.size} y={bounds.minL - 0.06} onClick={() => onSelect(null)} />
+      ) : (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, bounds.minL - 0.06, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
+            <planeGeometry args={[bounds.size * 4, bounds.size * 4]} />
+            <meshStandardMaterial color="#dfe3dc" roughness={1} />
+          </mesh>
+          <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, bounds.minL - 0.05, bounds.cy]} />
+        </>
+      )}
+      {real && <GrassField surfaces={surfaces} />}
+      {real && layer === 'none' && !showDims && <PostFX />}
+      {g && climate.values && <HeatLayer g={g} values={climate.values} ramp={climate.ramp} max={climate.max} opacity={layer === 'sun' ? 0.72 : 0.78} />}
+      {layer === 'sun' && <SunPath center={center} size={bounds.size} lat={climate.site.city.lat} lon={climate.site.city.lon} north={north} season={season} az={climate.sun.az} el={climate.sun.el} />}
+      {g && layer === 'wind' && climate.windSpeed && <WindParticles g={g} speed={climate.windSpeed} dir={climate.wind.dir} north={north} />}
+      {(layer === 'wind' || layer === 'comfort') && <WindArrow center={center} size={bounds.size} dir={climate.wind.dir} north={north} text={`רוח מ${dirText(climate.wind.dir)}`} />}
+      {layer === 'comfort' && <SeatSpots spots={climate.spots} label={season === 'winter' ? 'ישיבה בחורף' : season === 'summer' ? 'ישיבה בקיץ' : 'ישיבה'} size={bounds.size} />}
       {elements.map((e) =>
         e.kind === 'wall' ? (
           <WallMesh key={e.id} w={e} openings={openings} selected={selected} onSelect={onSelect} />
@@ -315,6 +389,25 @@ export default function ModelTab() {
   const [showDims, setShowDims] = useState(false)
   const [finish, setFinish] = useFinish<ModelFinish>('model', 'detailed')
   const [focusKey, setFocusKey] = useState(0)
+  const climateState = useClimateState()
+  const climate = useClimateData(project, variant.elements, climateState.st)
+  const glRef = useRef<THREE.WebGLRenderer | null>(null)
+  const snapshot = () => {
+    const gl = glRef.current
+    if (!gl) return
+    const name = `${(project.name || 'הדמיה').replace(/[\\/:*?"<>|]/g, ' ')} ${fmtHour(climateState.st.hour).replace(':', '')}.png`
+    gl.domElement.toBlob((b) => {
+      if (!b) return
+      const url = URL.createObjectURL(b)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+    }, 'image/png')
+  }
   const select = (id: string | null) => {
     const p = new URLSearchParams(params)
     if (id) p.set('el', id)
@@ -338,7 +431,8 @@ export default function ModelTab() {
       title="הבית והגינה בנפח, לפני שמזמינים חומר"
       points={[
           <>המודל נבנה מאותם אלמנטים של התוכנית: <b>גבהים, מפלסים וחומרים</b>.</>,
-          <>בודקים כאן <b>פרופורציות וצל</b>, ובוחרים <b>רמת גימור</b>.</>,
+          <>בודקים כאן <b>פרופורציות</b>, <b>שמש וצל בחורף ובקיץ</b>, <b>רוח</b> ו<b>מקומות נוחים לישיבה</b>.</>,
+          <>ב<b>גימור מפורט</b> רואים את החומרים כמו בהדמיה: אור שמש אמיתי, שמיים, דשא, טיח, רעפים וזכוכית.</>,
           <>לחיצה על אלמנט, במודל או ברשימה, בוחרת אותו ומתמקדת בו.</>,
         ]}
       legend
@@ -347,15 +441,17 @@ export default function ModelTab() {
         { k: 'לא אושרו', v: unapproved, tone: unapproved ? 'warn' : 'good' },
       ]}
     />
+    <ClimatePanel project={project} data={climate} state={climateState} />
     <div className="editor">
       <div className="model-box" data-testid="model-canvas">
-        <Canvas shadows={finish === 'detailed'} dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} onPointerMissed={() => select(null)}>
+        <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
-            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} />
+            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} />
           </ModelFinishCtx.Provider>
         </Canvas>
         <div className="model-tools">
           <IconBtn icon="dims" label="הצגת מידות" pressed={showDims} onClick={() => setShowDims((v) => !v)} />
+          <IconBtn icon="camera" label="שמירת תמונה" onClick={snapshot} testId="model-snapshot" />
           <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
             {MODEL_FINISH.map((f) => (
               <button key={f.id} type="button" role="radio" aria-checked={finish === f.id} className={`btn small ${finish === f.id ? 'active' : ''}`} onClick={() => setFinish(f.id)} title={f.d}>
@@ -383,6 +479,7 @@ export default function ModelTab() {
             {unapproved} אלמנטים עוד לא אושרו. המידות שלהם <Tag label="estimated" /> או <Tag label="assumed" />.
           </div>
         )}
+        <ClimateInsights data={climate} st={climateState.st} />
         {selected ? (
           <>
             <Link className="btn small" to={`../plan?el=${selected.id}&focus=1`}>
@@ -390,7 +487,7 @@ export default function ModelTab() {
             </Link>
             <ElementEditor project={project} el={selected} elements={variant.elements} name={names.get(selected.id) ?? ''} onClose={() => select(null)} />
           </>
-        ) : (
+        ) : climateState.st.layer !== 'none' ? null : (
           <div className="card flat muted" style={{ fontSize: 14 }}>
             לוחצים על אלמנט במודל כדי לערוך אותו. גוררים לסיבוב, גלגלת או צביטה לזום.
           </div>

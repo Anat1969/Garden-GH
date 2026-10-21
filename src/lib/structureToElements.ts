@@ -161,3 +161,11 @@ function along(p: Pt, w: { x1: number; y1: number; x2: number; y2: number }) {
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100
+
+// מצולעי היחידות במטרים, מתוך קריאת המבנה
+export function unitFootprints(p: Project): Pt[][] {
+  const s = p.permit?.structure
+  const mpp = p.permit?.scale.metersPerPt
+  if (!s || !mpp) return []
+  return s.units.map((u) => simplify(u.footprint.map((v) => ({ x: v.x * mpp, y: v.y * mpp })), 0.05)).filter((f) => f.length >= 3)
+}

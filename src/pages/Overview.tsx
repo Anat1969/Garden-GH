@@ -139,7 +139,7 @@ export default function Overview() {
           <Field label="שם הפרויקט">
             <input className="input" value={project.name} onChange={(e) => setP({ name: e.target.value })} placeholder="למשל: גינת משפחת לוי" />
           </Field>
-          <NumField label="כיוון צפון (מעלות, 0 = למעלה בתוכנית)" value={project.north} step={1} decimals={0} required={false} extracted={ex.north} onChange={(n) => setP({ north: n }, 'north')} />
+          <NumField label="כיוון צפון (מעלות, 0 = למעלה בתוכנית)" value={project.north} step={1} decimals={0} required={false} extracted={ex.north} onChange={(n) => setP({ north: n, northSet: true }, 'north')} />
           <NumField label='±0.00 במפלס מוחלט (מ")' value={project.baseLevel ?? 0} step={0.01} required={false} extracted={ex.baseLevel} onChange={(n) => setP({ baseLevel: n }, 'baseLevel')} />
           <NumField label='שטח המגרש (מ"ר)' value={project.plotArea ?? 0} step={1} required={false} extracted={ex.plotArea} onChange={(n) => setP({ plotArea: n }, 'plotArea')} />
           <Field label="סוג קרקע">
