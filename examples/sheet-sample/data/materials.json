@@ -1,0 +1,11 @@
+{
+  "materials": [
+    { "id": "concrete", "name_he": "בטון חשוף", "name_en": "Exposed concrete", "hex": "#b9b4aa", "behavior_he": "אוגר חום, מתבגר בכתמים רכים", "maintenance_he": "שטיפה בלחץ מים פעם בשנתיים, ציפוי הגנה כל חמש שנים" },
+    { "id": "glass", "name_he": "זכוכית בידודית", "name_en": "Insulated glazing", "hex": "#9fb4bd", "behavior_he": "מכניסה אור, מצריכה הצללה בדרום ובמערב", "maintenance_he": "ניקוי פעמיים בשנה" },
+    { "id": "groundcover", "name_he": "כיסוי קרקע ירוק זית", "name_en": "Olive groundcover", "hex": "#7d8a52", "behavior_he": "חסכוני במים, מקרר את הקרקע", "maintenance_he": "גיזום קל באביב" },
+    { "id": "ipe", "name_he": "עץ איפאה", "name_en": "Ipe wood", "hex": "#8a5a3c", "behavior_he": "מאפיר עם השנים אם לא שומן", "maintenance_he": "שמן פעם בשנה" },
+    { "id": "gravel", "name_he": "חצץ בהיר", "name_en": "Light gravel", "hex": "#d8cfbd", "behavior_he": "מנקז, מחזיר אור", "maintenance_he": "יישור ומילוי פעם בשנה" }
+  ],
+  "palette": { "chips": ["concrete", "glass", "groundcover", "ipe", "gravel"] },
+  "roles": { "envelope": "concrete", "roof": "concrete", "glass": "glass", "groundcover": "groundcover" }
+}

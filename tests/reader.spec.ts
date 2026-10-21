@@ -126,6 +126,6 @@ test('קריאה מלאה של היתר: מיפוי, מבנה, גבהים, מו�
 
   // כתב כמויות: שטח המצולע
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
-  await expect(page.getByText('דשא 1').first()).toBeVisible()
+  await expect(page.getByTestId('bom-table').getByText('דשא 1').first()).toBeVisible()
   expect(errors).toEqual([])
 })

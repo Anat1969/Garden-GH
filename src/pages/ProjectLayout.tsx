@@ -87,6 +87,10 @@ export default function ProjectLayout() {
             {project.name}
           </h1>
         </div>
+        <div className="row" style={{ gap: 8, alignItems: 'end' }}>
+        <Link className="btn" to={`/p/${project.id}/sheet`} data-testid="open-sheet">
+          גליון להדפסה
+        </Link>
         <label className="field" style={{ minWidth: 180 }}>
           <span>חלופה פעילה</span>
           <select
@@ -101,6 +105,7 @@ export default function ProjectLayout() {
             ))}
           </select>
         </label>
+        </div>
       </div>
       <nav className="tabs no-print" aria-label="לשוניות פרויקט">
         {TABS.map((t, i) => (

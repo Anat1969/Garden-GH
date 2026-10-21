@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 4173",
     "sample": "node scripts/make-sample-permit.mjs",
+    "sheet": "node scripts/sheet.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

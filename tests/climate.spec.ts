@@ -47,6 +47,9 @@ test('אקלים במודל: שמש וצל, רוח, נוחות לישיבה, צ�
   // נוחות לישיבה: מקומות מומלצים
   await layers.getByRole('radio', { name: 'נוחות לישיבה' }).click()
   await expect(page.getByTestId('climate-stats')).toContainText('מקומות מומלצים', { timeout: 30000 })
+  const before = await page.locator('.el-item').count()
+  await page.getByTestId('place-seating').click()
+  await expect(page.locator('.el-item')).not.toHaveCount(before)
   await page.getByTestId('model-canvas').evaluate((e) => e.scrollIntoView({ block: 'end' }))
   await page.screenshot({ path: 'shots/84-comfort.png' })
 

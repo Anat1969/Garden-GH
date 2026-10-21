@@ -410,7 +410,7 @@ tr.total-row td { background: #eef2ef; font-weight: 700; border-top: 2px solid v
   @page { size: A4 portrait; margin: 12mm 12mm 14mm; }
   html, body { background: #fff !important; }
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11pt; }
-  .topbar, .tabs, .no-print, .footer, .step-nav, .toast-host, .model-tools, .back-btn { display: none !important; }
+  .topbar, .tabs, .no-print, .footer, .step-nav, .toast-host, .toast, .model-tools, .back-btn { display: none !important; }
   .print-only { display: block !important; }
   .app-main, main, .container { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .card { box-shadow: none !important; border: 1px solid #d8d8d2 !important; }
@@ -624,3 +624,25 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
   .pt-cat, .pt-sum { break-after: avoid; }
   .pt-existing { font-size: 8.5pt; margin-top: 4mm; }
 }
+
+/* גליון להדפסה */
+.sheet-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.sheet-stage { overflow: auto; background: #e3dfd5; border-radius: 14px; padding: 16px; }
+.sheet-stage .sheet-page { box-shadow: 0 6px 30px rgba(0,0,0,.18); }
+.sheet-side { display: grid; gap: 12px; position: sticky; top: calc(var(--bar-h) + 12px); }
+.sheet-fields { display: grid; gap: 8px; }
+.sheet-checks ul { margin: 4px 0 8px; padding-inline-start: 18px; font-size: 13px; display: grid; gap: 4px; }
+.sheet-checks li.ok { color: #2f6b45; }
+.sheet-checks li.bad { color: #9a4a1a; font-weight: 600; }
+@media screen and (max-width: 900px) {
+  .sheet-layout { grid-template-columns: minmax(0, 1fr); }
+  .sheet-side { position: static; }
+  .sheet-stage { padding: 8px; }
+  .sheet-stage .sheet-page { zoom: 0.45; }
+}
+@media print {
+  .sheet-layout { display: block !important; }
+  .sheet-stage { background: none !important; padding: 0 !important; overflow: visible !important; border-radius: 0; }
+  .sheet-stage .sheet-page { box-shadow: none !important; }
+}
+@media print { .sheet-layout { margin: 0 !important; } }
