@@ -37,6 +37,8 @@ const DimsTab = lazyRetry(() => import('./pages/DimsTab'))
 const ModelTab = lazyRetry(() => import('./pages/ModelTab'))
 const DesignTab = lazyRetry(() => import('./pages/DesignTab'))
 const Guide = lazyRetry(() => import('./pages/Guide'))
+const SheetPage = lazyRetry(() => import('./pages/SheetPage'))
+const SheetRender = lazyRetry(() => import('./pages/SheetPage').then((m) => ({ default: m.SheetRender })))
 
 class PageBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false }
@@ -71,6 +73,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/projects" element={<Projects />} />
+            <Route path="/p/:id/sheet" element={<SheetPage />} />
+            <Route path="/sheet-render" element={<SheetRender />} />
             <Route path="/p/:id" element={<ProjectLayout />}>
               <Route index element={<Overview />} />
               <Route path="permit" element={<PermitTab />} />

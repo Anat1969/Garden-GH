@@ -2,6 +2,7 @@ import type { PriceItem, Unit } from './types'
 
 // קובץ מחירון: code,description,unit,price,category,verified,source,date
 export const CSV_HEADER = 'code,description,unit,price,category,verified,source,date'
+export const CSV_HEADER_HE = 'קוד,תיאור,יחידה,מחיר,קטגוריה,מאומת,מקור,תאריך'
 
 const UNIT_ALIASES: Record<string, Unit> = {
   m2: 'm2',
@@ -53,7 +54,9 @@ export function parsePriceCsv(text: string): ParseResult {
   const errors: string[] = []
   const items: PriceItem[] = []
   if (!rows.length) return { items, errors: ['הקובץ ריק'] }
-  const header = splitCsvLine(rows[0]).map((h) => h.toLowerCase())
+  // כותרות בעברית או באנגלית
+  const HE: Record<string, string> = { 'קוד': 'code', 'קוד סעיף': 'code', 'תיאור': 'description', 'תיאור הסעיף': 'description', 'יחידה': 'unit', 'מחיר': 'price', 'מחיר יחידה': 'price', 'קטגוריה': 'category', 'סעיף': 'category', 'מאומת': 'verified', 'מקור': 'source', 'תאריך': 'date' }
+  const header = splitCsvLine(rows[0]).map((h) => HE[h.trim()] ?? h.toLowerCase())
   const idx = (name: string) => header.indexOf(name)
   for (const need of ['code', 'description', 'unit', 'price']) {
     if (idx(need) < 0) errors.push(`חסרה עמודה: ${need}`)
@@ -61,6 +64,8 @@ export function parsePriceCsv(text: string): ParseResult {
   if (errors.length) return { items, errors }
   rows.slice(1).forEach((line, i) => {
     const c = splitCsvLine(line)
+    // שורות הסבר (פחות מארבע עמודות, או קטגוריות בסוף התבנית) מדולגות
+    if (c.filter((x) => x).length < 4) return
     const unitRaw = (c[idx('unit')] ?? '').toLowerCase()
     const unit = UNIT_ALIASES[unitRaw] ?? UNIT_ALIASES[unitRaw.replace(/\s/g, '')]
     const price = Number((c[idx('price')] ?? '').replace(/[₪,\s]/g, ''))

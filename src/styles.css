@@ -405,10 +405,38 @@ tr.total-row td { background: #eef2ef; font-weight: 700; border-top: 2px solid v
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.print-only { display: none; }
 @media print {
-  .topbar, .tabs, .no-print, .footer { display: none !important; }
-  body { background: #fff; }
-  .card { box-shadow: none; }
+  @page { size: A4 portrait; margin: 12mm 12mm 14mm; }
+  html, body { background: #fff !important; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11pt; }
+  .topbar, .tabs, .no-print, .footer, .step-nav, .toast-host, .toast, .model-tools, .back-btn { display: none !important; }
+  .print-only { display: block !important; }
+  .app-main, main, .container { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .card { box-shadow: none !important; border: 1px solid #d8d8d2 !important; }
+  /* בלי חיתוך: מסגרות, כרטיסים, תמונות ושורות נשארים שלמים */
+  .card, .notice, .disclaimer, figure, img, svg, canvas, .prompt-box, .insight, .insights, .phase, .rule-group, .rule, .guide-card, .page-intro, .stat, tr, .how-calc, .climate-insights { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3, .h-section, .h-page, .group-row { break-after: avoid; page-break-after: avoid; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  .table-wrap, .dt-wrap { overflow: visible !important; max-height: none !important; }
+  /* נושא חדש: עמוד חדש */
+  .print-page { break-before: page; page-break-before: always; }
+  .print-head { display: flex !important; align-items: center; gap: 12px; border-bottom: 1.5px solid #2b2b2b; padding-bottom: 6px; margin-bottom: 10px; }
+  .print-head img { height: 34px; mix-blend-mode: multiply; }
+  .print-head .ph-title { font-size: 18pt; font-weight: 800; }
+  .print-head .ph-sub { font-size: 10pt; color: #444; }
+  .page-intro .pi-art, .pi-art { display: none !important; }
+  select { appearance: none; border: none !important; background: none !important; padding: 0 !important; }
+  input[type=checkbox] { display: none; }
+}
+.print-visuals { display: none; }
+@media print {
+  .print-visuals { display: grid !important; gap: 10mm; }
+  .print-fig { margin: 0; display: grid; gap: 4px; }
+  .print-fig figcaption { font-size: 9pt; color: #555; }
+  .print-plan svg, .print-fig img { width: 100%; max-height: 115mm; object-fit: contain; border: 1px solid #ccc; border-radius: 4px; background: #fafaf7; }
 }
 .sources { margin: 10px 0 0; padding-inline-start: 18px; display: grid; gap: 8px; font-size: 14px; }
 details.card > summary { cursor: pointer; }
@@ -436,7 +464,13 @@ details.card > summary { cursor: pointer; }
 .zone-item.on { border-color: var(--accent); background: var(--accent-soft); }
 .zone-item i { width: 24px; height: 24px; border-radius: 6px; background-size: cover; flex: 0 0 auto; }
 .zone-item input { accent-color: var(--accent); }
-.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: start; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; align-items: stretch; grid-auto-flow: row dense; }
+/* כל הכרטיסים בשורה באותו גובה: התוכן למעלה, השורה התחתונה והכפתור מיושרים לתחתית */
+.guide-card:not(.open) { display: flex; flex-direction: column; }
+.guide-card:not(.open) > .btn { margin-top: auto !important; align-self: flex-start; }
+.guide-card:not(.open) > .style-meta { margin-top: auto; padding-top: 8px; }
+.guide-card:not(.open) > .style-meta + .btn { margin-top: 10px !important; }
+.guide-card .stored-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; margin-bottom: 8px; }
 .guide-card.open { grid-column: 1 / -1; }
 ul.tight { margin: 6px 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 14px; }
 .rules { display: grid; gap: 8px; }
@@ -546,3 +580,69 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
 .climate-insights { display: grid; gap: 8px; }
 .climate-insights .climate-stats { grid-template-columns: 1fr 1fr; }
 .climate-insights .climate-stats .stat b { font-size: 15px; }
+.calc-cell { font-size: 12.5px; display: grid; gap: 2px; white-space: normal; }
+.existing-toggle { display: flex; gap: 4px; align-items: center; font-size: 12px; color: var(--muted, #666); margin-top: 4px; font-weight: 400; }
+.how-calc .steps-list li { margin-bottom: 4px; }
+@media print { .dt-bar, .dt-sel-sum, .sel-cell { display: none !important; } }
+@media print {
+  /* גריד ופלקס לא מתחלקים טוב בין עמודים: בהדפסה הכול זורם כבלוקים */
+  .stack, .dt, .editor, .side { display: block !important; }
+  .stack > * + *, .dt > * + * { margin-top: 5mm; }
+  tfoot { display: table-row-group; }
+  .table-wrap table { font-size: 8.5pt; }
+  .table-wrap th, .table-wrap td { padding: 3px 4px !important; vertical-align: top; }
+  .table-wrap .lbl { white-space: normal; font-size: 7pt; padding: 0 4px; }
+  .table-wrap .calc-cell { font-size: 7.5pt; }
+  .page-intro { padding: 4mm !important; }
+}
+@media print {
+  .print-visuals { display: block !important; }
+  .print-visuals .print-fig + .print-fig { margin-top: 6mm; }
+  .print-plan svg { width: 100% !important; height: 100mm !important; }
+  .print-fig img { width: 100%; height: 100mm !important; object-fit: contain; }
+}
+@media print {
+  .print-plan .plan-thumb { aspect-ratio: auto !important; height: 105mm; }
+  .print-plan .plan-thumb svg, .print-plan svg { height: 100% !important; border: none; }
+  .table-wrap table { table-layout: fixed; width: 100% !important; min-width: 0 !important; }
+  .table-wrap th, .table-wrap td { overflow-wrap: anywhere; word-break: break-word; }
+  .lbl { border-radius: 4px !important; }
+  .page-intro .insights, .pi-insights { display: flex !important; flex-wrap: wrap; gap: 3mm; }
+}
+@media print {
+  .print-bom { display: block !important; }
+  .pt { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8.5pt; }
+  .pt th { background: #2b2b2b; color: #fff; font-weight: 700; padding: 4px 5px; text-align: start; }
+  .pt td { border-bottom: 0.5px solid #c9c9c2; padding: 3px 5px; vertical-align: top; overflow-wrap: anywhere; }
+  .pt .num { direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+  .pt-cat td { background: #ecebe4; font-weight: 800; font-size: 9.5pt; border-bottom: 1px solid #2b2b2b; }
+  .pt-sum td { font-weight: 700; background: #f6f5f0; }
+  .pt-total td { font-weight: 800; font-size: 10pt; border-top: 1.5px solid #2b2b2b; }
+  .pt-small { font-size: 7.5pt; color: #444; }
+  .pt-warn { font-size: 7pt; color: #8a5a00; }
+  .pt-group { break-inside: auto; }
+  .pt-cat, .pt-sum { break-after: avoid; }
+  .pt-existing { font-size: 8.5pt; margin-top: 4mm; }
+}
+
+/* גליון להדפסה */
+.sheet-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.sheet-stage { overflow: auto; background: #e3dfd5; border-radius: 14px; padding: 16px; }
+.sheet-stage .sheet-page { box-shadow: 0 6px 30px rgba(0,0,0,.18); }
+.sheet-side { display: grid; gap: 12px; position: sticky; top: calc(var(--bar-h) + 12px); }
+.sheet-fields { display: grid; gap: 8px; }
+.sheet-checks ul { margin: 4px 0 8px; padding-inline-start: 18px; font-size: 13px; display: grid; gap: 4px; }
+.sheet-checks li.ok { color: #2f6b45; }
+.sheet-checks li.bad { color: #9a4a1a; font-weight: 600; }
+@media screen and (max-width: 900px) {
+  .sheet-layout { grid-template-columns: minmax(0, 1fr); }
+  .sheet-side { position: static; }
+  .sheet-stage { padding: 8px; }
+  .sheet-stage .sheet-page { zoom: 0.45; }
+}
+@media print {
+  .sheet-layout { display: block !important; }
+  .sheet-stage { background: none !important; padding: 0 !important; overflow: visible !important; border-radius: 0; }
+  .sheet-stage .sheet-page { box-shadow: none !important; }
+}
+@media print { .sheet-layout { margin: 0 !important; } }

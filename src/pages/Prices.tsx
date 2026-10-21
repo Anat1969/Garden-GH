@@ -5,7 +5,7 @@ import { PageIntro } from '../components/PageIntro'
 import { DataTable } from '../components/DataTable'
 import { IconBtn } from '../components/EditIcons'
 import type { PriceItem } from '../lib/types'
-import { CSV_HEADER, SAMPLE_CSV, parsePriceCsv } from '../lib/csv'
+import { CSV_HEADER, CSV_HEADER_HE, SAMPLE_CSV, parsePriceCsv } from '../lib/csv'
 import { CATEGORY_TEXT, DISCLAIMER, type Category } from '../lib/bom'
 import { UNIT_TEXT } from '../lib/types'
 import { Empty, Num, toast } from '../components/ui'
@@ -33,7 +33,9 @@ export default function Prices() {
 
   const downloadTemplate = () => {
     const cats = Object.keys(CATEGORY_TEXT).join(' | ')
-    const blob = new Blob(['﻿' + CSV_HEADER + '\n' + `D-0000,תיאור הסעיף,m2,0,paving,false,דקל,2026-10\n`], { type: 'text/csv;charset=utf-8' })
+    // תבנית בעברית: יחידות בעברית, קטגוריה בקוד (הרשימה בסוף הקובץ)
+    const lines = [CSV_HEADER_HE, 'D-0000,תיאור הסעיף,מ"ר,0,paving,לא,דקל,2026-10', '', 'קטגוריות אפשריות:', ...Object.entries(CATEGORY_TEXT).map(([k, t]) => `${k},${t}`)]
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'תבנית-מחירון.csv'

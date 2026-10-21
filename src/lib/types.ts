@@ -183,6 +183,7 @@ interface Base {
   label: Label
   source: string
   approved: boolean
+  existing?: boolean // קיים בשטח: מוצג בכתב הכמויות בלי תמחור. גדר גבול מגרש קיימת כברירת מחדל
 }
 
 export interface Wall extends Base {
@@ -323,6 +324,7 @@ export interface Project {
   city?: string // עיר שנבחרה ידנית (כשלא זוהתה מהכתובת)
   north: number
   northSet?: boolean // כיוון הצפון אושר או הוזן ידנית
+  sheet?: { subtitle?: string; studioName?: string; studioAddress?: string; gush?: string; helka?: string; drawingNo?: string; planner?: string; poem?: string; post?: string } // שדות גיליון ההדפסה
   soil: string
   levelsNote: string
   permit: Permit | null

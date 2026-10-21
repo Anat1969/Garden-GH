@@ -131,7 +131,7 @@ export default function Guide() {
           {APPROACHES.map((a) => {
             const isOpen = open === `approach-${a.id}`
             return (
-              <article key={a.id} id={`approach-${a.id}`} className="card guide-card">
+              <article key={a.id} id={`approach-${a.id}`} className={`card guide-card ${isOpen ? 'open' : ''}`}>
                 <h3 className="h-section" style={{ margin: '0 0 4px' }}>
                   {a.name}
                 </h3>

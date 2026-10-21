@@ -26,7 +26,7 @@ test('הפרויקט של שני נוצר אוטומטית, עם מודל, מי�
   await page.waitForTimeout(2500)
   await page.screenshot({ path: 'shots/17-shani-model.png' })
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
-  await expect(page.getByText('דשא 1').first()).toBeVisible()
+  await expect(page.getByTestId('bom-table').getByText('דשא 1').first()).toBeVisible()
   // יצירה חוזרת מהכפתור
   await page.getByRole('button', { name: 'תפריט המערכת' }).click()
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()

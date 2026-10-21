@@ -2,7 +2,13 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import { useApp, updateVariant } from '../lib/store'
-import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, computeBom, hasBasis, sumRange, fmtMoney, type BomLine } from '../lib/bom'
+import { CATEGORY_TEXT, DISCLAIMER, NO_BASIS, PHASES, VAT, computeBom, hasBasis, sumRange, fmtMoney, fmtNum, type BomLine } from '../lib/bom'
+import { upsertElement } from '../lib/store'
+import { exportBomCsv } from '../lib/bomCsv'
+import { printPage } from '../lib/printing'
+import { PrintVisuals } from '../components/PrintVisuals'
+import { BomPrintTable } from '../components/BomPrintTable'
+import type { Element } from '../lib/types'
 import { LABEL_TEXT } from '../lib/types'
 import { PageIntro, type Insight } from '../components/PageIntro'
 import { DataTable } from '../components/DataTable'
@@ -23,25 +29,6 @@ export const weakest = (a: Label, b: Label): Label => (RANK[a] >= RANK[b] ? a : 
 
 export function lineLabel(l: BomLine): Label {
   return l.item ? weakest(l.qtyLabel, priceLabel(l.item)) : l.qtyLabel
-}
-
-function exportCsv(name: string, lines: BomLine[]) {
-  const esc = (s: string | number) => `"${String(s).replace(/"/g, '""')}"`
-  const rows = [
-    ['אלמנט', 'סעיף', 'קוד מחירון', 'כמות', 'יחידה', 'תווית כמות', 'מחיר יחידה', 'מינימום', 'מקסימום'].map(esc).join(','),
-    ...lines.map((l) =>
-      [l.elementName, CATEGORY_TEXT[l.category], l.item?.code ?? '', l.qty, UNIT_TEXT[l.unit], l.qtyLabel === 'measured' ? 'מדוד מהיתר' : l.qtyLabel === 'estimated' ? 'מוערך' : 'הונח', l.item?.price ?? '', l.min !== null ? Math.round(l.min) : '', l.max !== null ? Math.round(l.max) : '']
-        .map(esc)
-        .join(','),
-    ),
-    esc(DISCLAIMER),
-  ]
-  const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `כתב-כמויות-${name}.csv`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
 export default function BomTab() {
@@ -73,6 +60,11 @@ export default function BomTab() {
       return { ...v, assignments: a }
     })
 
+  const toggleExisting = (id: string, on: boolean) => {
+    const el = variant.elements.find((e) => e.id === id)
+    if (el) upsertElement(project.id, { ...el, existing: on } as Element)
+  }
+
   const houseCount = variant.elements.filter((e) => e.kind === 'wall' && e.scope === 'house').length
 
   // תובנות לראש העמוד: טווח כולל, מה מייקר, ועד כמה הכמויות מדודות
@@ -85,6 +77,9 @@ export default function BomTab() {
     { k: 'מה הכי מייקר', v: top.length ? top[0][0] : 'אין', note: top.length ? top.map(([c, v]) => `${c} עד ${fmtMoney(v)}${sum.max ? ` (${Math.round((v / sum.max) * 100)}%)` : ''}`).join(' · ') : undefined },
     { k: 'כמויות מדודות מהיתר', v: `${measured} מתוך ${lines.length}`, tone: lines.length && measured / lines.length >= 0.6 ? 'good' : 'warn', note: 'השאר מוערך או הונח' },
   ]
+  if (sum.max) insights.push({ k: 'כולל מע"מ 18%', v: `${fmtMoney(sum.min * (1 + VAT))} עד ${fmtMoney(sum.max * (1 + VAT))}`, note: 'המחירון והטבלה ללא מע"מ' })
+  const existingCount = new Set(lines.filter((l) => l.existing).map((l) => l.elementId)).size
+  if (existingCount) insights.push({ k: 'קיים, לא מתומחר', v: existingCount, note: 'למשל גדר גבול המגרש. אפשר לשנות בטבלה' })
   if (sum.missing) insights.push({ k: 'שורות בלי מחיר', v: sum.missing, tone: 'warn' })
   if (budget !== null && sum.max)
     insights.push({ k: 'מול תקציב הלקוח', v: fmtMoney(budget), tone: sum.max <= budget ? 'good' : sum.min > budget ? 'bad' : 'warn', note: sum.max <= budget ? 'גם הטווח העליון בתוך התקציב' : sum.min > budget ? 'גם הטווח התחתון חורג' : 'סיכון לחריגה' })
@@ -122,6 +117,9 @@ export default function BomTab() {
           </Empty>
         </div>
       ) : (
+        <>
+        <BomPrintTable lines={lines} />
+        <div className="no-print">
         <DataTable<BomLine>
           testId="bom-table"
           caption="כתב כמויות"
@@ -133,6 +131,7 @@ export default function BomTab() {
             { key: 'phase', label: 'שלב ביצוע', value: phaseOf },
             { key: 'label', label: 'תווית כמות', value: (l) => LABEL_TEXT[l.qtyLabel] },
             { key: 'element', label: 'אלמנט', value: (l) => l.elementName },
+            { key: 'state', label: 'חדש או קיים', value: (l) => (l.existing ? 'קיים, לא מתומחר' : 'עבודה חדשה') },
           ]}
           cols={[
             {
@@ -143,6 +142,9 @@ export default function BomTab() {
                 <>
                   {l.elementName}
                   {l.warning && <div className="lbl assumed" style={{ display: 'block', marginTop: 4, whiteSpace: 'normal' }}>{l.warning}</div>}
+                  <label className="existing-toggle no-print">
+                    <input type="checkbox" checked={l.existing} onChange={(e) => toggleExisting(l.elementId, e.target.checked)} /> קיים בשטח
+                  </label>
                 </>
               ),
             },
@@ -174,6 +176,23 @@ export default function BomTab() {
                 )
               },
             },
+            {
+              key: 'calc',
+              label: 'איך חושב',
+              minWidth: 200,
+              render: (l) => (
+                <div className="calc-cell">
+                  <div>{l.how}</div>
+                  {l.existing ? (
+                    <div className="muted">קיים בשטח, לא נכנס לעלות</div>
+                  ) : l.item && l.total !== null ? (
+                    <div className="num" dir="ltr" style={{ textAlign: 'right' }}>
+                      {fmtNum(l.qty, l.unit === 'unit' ? 0 : 2)} × {fmtMoney(l.item.price)} = {fmtMoney(l.total)}
+                    </div>
+                  ) : null}
+                </div>
+              ),
+            },
             { key: 'price', label: 'מחיר יחידה', sort: (l) => l.item?.price ?? null, render: (l) => (l.item ? <Num value={l.item.price} money label={priceLabel(l.item)} /> : <span className="muted">אין</span>) },
             {
               key: 'range',
@@ -194,15 +213,27 @@ export default function BomTab() {
             },
           ]}
         />
+        </div>
+        </>
       )}
 
       <div className="row no-print">
-        <IconBtn icon="download" label="ייצוא CSV" onClick={() => exportCsv(project.name, lines)} disabled={!lines.length} />
-        <IconBtn icon="print" label="הדפסה" onClick={() => window.print()} />
+        <IconBtn icon="download" label="ייצוא CSV" onClick={() => exportBomCsv(project, variant.name, lines)} disabled={!lines.length} />
+        <IconBtn icon="print" label="הדפסה" onClick={printPage} />
       </div>
-      <div className="muted" style={{ fontSize: 13 }}>
-        טווח העלות משקלל את אי הוודאות בכמות (מדוד 3%, מוערך 10%, הונח 25%) ובמחיר (סעיף מאומת 5%, לא מאומת 20%).
-      </div>
+      <section className="card how-calc print-page" data-testid="how-calc">
+        <h2 className="h-section">איך מחושב כתב הכמויות</h2>
+        <ol className="steps-list">
+          <li><b>כמות:</b> לכל אלמנט בתוכנית מחושבת כמות מהגיאומטריה שלו. משטח לפי שטח המצולע, גדר ושביל לפי אורך, קיר לפי אורך כפול גובה, ופריט כיחידה.</li>
+          <li><b>עבודות נלוות:</b> מתחת למשטח נוספות שורות לפי עומק מקובל. ריצוף: חפירה 0.30 מ' ומצע 0.15 מ'. דשא: אדמה גננית 0.10 מ' ומתזים. ערוגה: אדמה 0.30 מ' וטפטוף.</li>
+          <li><b>מחיר יחידה:</b> מסעיף המחירון שמתאים לסעיף ולתאריך. אפשר להחליף סעיף בכל שורה, והבחירה נשמרת.</li>
+          <li><b>עלות:</b> כמות × מחיר יחידה. העמודה "איך חושב" מציגה את התרגיל לכל שורה.</li>
+          <li><b>טווח:</b> העלות מורחבת לפי אי הוודאות. בכמות: מדוד 3%, מוערך 10%, הונח 25%. במחיר: סעיף מאומת 5%, לא מאומת 20%.</li>
+          <li><b>קיים בשטח:</b> אלמנט קיים, כמו גדר גבול המגרש מההיתר, מוצג בלי עלות. מסמנים או מבטלים בטבלה.</li>
+          <li><b>מע"מ:</b> המחירון והטבלה ללא מע"מ. הסכום כולל מע"מ 18% מופיע בתובנות.</li>
+        </ol>
+      </section>
+      <PrintVisuals project={project} />
     </div>
   )
 }
