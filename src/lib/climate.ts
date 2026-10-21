@@ -23,11 +23,27 @@ export interface SiteInfo {
   regionText: string
 }
 
+function nearestCity(lat: number, lon: number) {
+  let best = CITIES[0]
+  let d = Infinity
+  for (const c of CITIES) {
+    const x = Math.hypot(c.lat - lat, (c.lon - lon) * Math.cos((lat * Math.PI) / 180))
+    if (x < d) {
+      d = x
+      best = c
+    }
+  }
+  return d < 0.25 ? best : null
+}
+
 export function siteInfo(p: Project): SiteInfo {
   const manual = cityByName(p.city)
   const fromAddr = findCity(p.address) ?? findCity(p.name)
-  const city = manual ?? fromAddr ?? ISRAEL_CENTER
-  const cityHow = manual ? 'manual' : fromAddr ? 'address' : 'default'
+  // מיקום על המפה: קו רוחב ואורך מדויקים. האזור והגובה מהעיר הקרובה ביותר
+  const near = p.location ? nearestCity(p.location.lat, p.location.lon) : null
+  const baseCity = manual ?? fromAddr ?? near ?? ISRAEL_CENTER
+  const city = p.location ? { ...baseCity, lat: p.location.lat, lon: p.location.lon } : baseCity
+  const cityHow = manual ? 'manual' : fromAddr ? 'address' : near ? 'address' : 'default'
   const base = p.baseLevel ?? p.building?.baseAbs ?? null
   const elev = base !== null && Number.isFinite(base) ? base : city.elev
   const elevLabel: Label = base !== null ? (p.extracted?.baseLevel ? 'measured' : 'assumed') : cityHow === 'default' ? 'assumed' : 'estimated'

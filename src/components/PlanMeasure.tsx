@@ -125,7 +125,8 @@ export function DimsElements({ elements, k, selected, onPick }: { elements: Elem
     placed.push({ x, y, w, h })
     return true
   }
-  const ordered = [...elements].sort((a, b) => (a.id === selected ? -1 : b.id === selected ? 1 : 0) || (b.kind === 'surface' ? surfaceArea(b) : 0) - (a.kind === 'surface' ? surfaceArea(a) : 0))
+  const rank = (e: Element) => (e.id === selected ? 0 : e.kind === 'wall' && e.scope === 'house' ? 2 : 1)
+  const ordered = [...elements].sort((a, b) => rank(a) - rank(b) || (b.kind === 'surface' ? surfaceArea(b) : 0) - (a.kind === 'surface' ? surfaceArea(a) : 0))
   return (
     <g data-testid="plan-dims">
       {ordered.map((e) => {
@@ -134,8 +135,8 @@ export function DimsElements({ elements, k, selected, onPick }: { elements: Elem
         const pick = onPick ? () => onPick(e.id) : undefined
         if (e.kind === 'wall' || e.kind === 'fence') {
           const L = Math.hypot(e.x2 - e.x1, e.y2 - e.y1)
-          // קירות הבית: מידותיהם בשרשראות. כאן רק כשנבחרו
-          if (!sel && (L < 1 || (e.kind === 'wall' && e.scope === 'house'))) return null
+          // קירות הבית אחרונים בעדיפות: מוצגים רק כשיש להם מקום פנוי
+          if (!sel && (L < 1 || (e.kind === 'wall' && e.scope === 'house' && L < 2.5))) return null
           const off = (e.kind === 'wall' ? e.thickness / 2 : 0) + k * 14
           const ang = Math.atan2(e.y2 - e.y1, e.x2 - e.x1)
           const nx = -Math.sin(ang) * (off + k * 9)

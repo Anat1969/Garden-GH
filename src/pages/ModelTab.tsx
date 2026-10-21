@@ -27,6 +27,7 @@ import { HeatLayer, SeatSpots, SunLight, SunPath, WindArrow, WindParticles, sunV
 import { Atmosphere, GrassField, NatureGround, PostFX, RealSurfMat, StoneWallMat } from '../components/realism3d'
 import { fmtHour } from '../lib/sun'
 import { saveDocBlob } from '../lib/idb'
+import { ViewShots, type ShotView } from '../components/ViewShots'
 import { modelImageKey } from '../components/PrintVisuals'
 import * as THREE from 'three'
 
@@ -578,6 +579,35 @@ export default function ModelTab() {
   const climateState = useClimateState()
   const climate = useClimateData(project, variant.elements, climateState.st)
   const glRef = useRef<THREE.WebGLRenderer | null>(null)
+  // הפקת תמונות ממבטים: בלי מידות, כל מבט בתורו, חיתוך לריבוע 1:1
+  const captureViews = async (views: ShotView[]) => {
+    const gl = glRef.current
+    if (!gl) return []
+    const prevDims = showDims
+    const prevView = view.id
+    setShowDims(false)
+    const out: { view: ShotView; blob: Blob }[] = []
+    const frames = (n: number) => new Promise<void>((r) => {
+      let i = 0
+      const f = () => (++i >= n ? r() : requestAnimationFrame(f))
+      requestAnimationFrame(f)
+    })
+    for (const v of views) {
+      if (v !== 'current') setView((x) => ({ id: v, key: x.key + 1 }))
+      await new Promise((r) => setTimeout(r, 900))
+      await frames(3)
+      const src = gl.domElement
+      const size = Math.min(src.width, src.height)
+      const c = document.createElement('canvas')
+      c.width = c.height = Math.min(1400, size)
+      c.getContext('2d')!.drawImage(src, (src.width - size) / 2, (src.height - size) / 2, size, size, 0, 0, c.width, c.height)
+      const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'))
+      if (blob) out.push({ view: v, blob })
+    }
+    if (views.some((v) => v !== 'current')) setView((x) => ({ id: prevView, key: x.key + 1 }))
+    setShowDims(prevDims)
+    return out
+  }
   const snapshot = () => {
     const gl = glRef.current
     if (!gl) return
@@ -711,6 +741,7 @@ export default function ModelTab() {
         </div>
       </aside>
     </div>
+    <ViewShots project={project} variant={variant} capture={captureViews} />
     </div>
   )
 }
