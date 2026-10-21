@@ -36,6 +36,7 @@ const PlanTab = lazyRetry(() => import('./pages/PlanTab'))
 const DimsTab = lazyRetry(() => import('./pages/DimsTab'))
 const ModelTab = lazyRetry(() => import('./pages/ModelTab'))
 const DesignTab = lazyRetry(() => import('./pages/DesignTab'))
+const BriefTab = lazyRetry(() => import('./pages/BriefTab'))
 const Guide = lazyRetry(() => import('./pages/Guide'))
 const SheetPage = lazyRetry(() => import('./pages/SheetPage'))
 const SheetRender = lazyRetry(() => import('./pages/SheetPage').then((m) => ({ default: m.SheetRender })))
@@ -78,6 +79,7 @@ export default function App() {
               <Route index element={<Overview />} />
               <Route path="permit" element={<PermitTab />} />
               <Route path="dims" element={<DimsTab />} />
+              <Route path="brief" element={<BriefTab />} />
               <Route path="design" element={<DesignTab />} />
               <Route path="plan" element={<PlanTab />} />
               <Route path="model" element={<ModelTab />} />
