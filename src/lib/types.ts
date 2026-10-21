@@ -123,7 +123,7 @@ export interface PlanStructure {
   units: { name: string; footprint: Pt[]; wallCm: number; levelRel: number; levelAbs: number | null }[]
   openings: { type: 'door' | 'sliding_door' | 'window' | 'opening'; a: Pt; b: Pt }[]
   plot: Pt[]
-  zones: { kind: string; label: string; polygon: Pt[]; levelAbs: number | null }[]
+  zones: { kind: string; label: string; polygon: Pt[]; levelAbs: number | null; levelToAbs?: number; down?: 'N' | 'S' | 'E' | 'W' }[]
   levels: { text: string; abs: number | null; rel: number | null; at: Pt }[]
   trees: { at: Pt; r: number; kind: 'tree' | 'palm' | 'shrub' }[]
   retaining: { a: Pt; b: Pt; label: string }[]
@@ -219,6 +219,7 @@ export interface Surface extends Base {
   d: number
   level: number
   color?: string // צבע שגובר על צבע החומר
+  stairs?: { bottom: number; dir: { x: number; y: number } } // מדרגות: level הוא המפלס העליון, bottom התחתון, dir כיוון הירידה בתוכנית
 }
 
 export interface Fence extends Base {

@@ -12,7 +12,7 @@ import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTextur
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
-import { BuildingMass, HouseMat, Label3D, NorthArrow, PolySurface, Tree, unitFootprints } from '../components/model3d'
+import { BuildingMass, HouseMat, Label3D, NorthArrow, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
@@ -242,10 +242,24 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
     let minL = 0
     for (const e of elements) if (e.kind === 'surface' || e.kind === 'object' || e.kind === 'line') minL = Math.min(minL, e.level)
     const b = boundsOf(elements)
-    if (!b) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0 }
+    if (!b) return { cx: 0, cy: 0, size: 20, minX: -10, minY: -10, minL: 0, siteL: 0 }
     const { minX, minY, maxX, maxY } = b
-    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL }
+    // מדרגות שיורדות מתחת לגינה (אל הרחוב): הקרקע יורדת למפלס התחתון, והמגרש מוצג כגוש
+    let siteL = minL
+    for (const e of elements) if (e.kind === 'surface' && e.stairs) siteL = Math.min(siteL, e.stairs.bottom)
+    return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, size: Math.max(8, maxX - minX, maxY - minY), minX, minY, minL, siteL }
   }, [elements])
+  const plinth = useMemo(() => {
+    if (bounds.siteL > bounds.minL - 0.3) return null
+    const st0 = project.permit?.structure
+    const k = project.permit?.scale.metersPerPt
+    const b = boundsOf(elements)
+    const plot = st0?.plot?.length && k ? st0.plot.map((v) => ({ x: v.x * k, y: v.y * k })) : b ? [{ x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY }, { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY }] : null
+    if (!plot) return null
+    const cuts = elements.filter((e): e is Surface => e.kind === 'surface' && Boolean(e.stairs) && Boolean(e.poly)).map((e) => e.poly!)
+    return { plot, cuts }
+  }, [bounds, elements, project.permit])
+  const groundY = (plinth ? bounds.siteL : bounds.minL) - 0.06
   // הגינה במרכז הבמה: המצלמה מכוונת למרכז המשטחים והפריטים, לא למרכז הבית
   const gardenC = useMemo(() => {
     const g = boundsOf(elements.filter((e) => e.kind === 'surface' || e.kind === 'object' || e.kind === 'line'))
@@ -282,16 +296,17 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
       )}
       {real && <Atmosphere center={center} size={bounds.size} sunDir={sunDir} />}
       {real ? (
-        <NatureGround center={center} size={bounds.size} y={bounds.minL - 0.06} onClick={() => onSelect(null)} />
+        <NatureGround center={center} size={bounds.size} y={groundY} onClick={() => onSelect(null)} />
       ) : (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, bounds.minL - 0.06, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[bounds.cx, groundY, bounds.cy]} receiveShadow onClick={() => onSelect(null)}>
             <planeGeometry args={[bounds.size * 4, bounds.size * 4]} />
             <meshStandardMaterial color="#dfe3dc" roughness={1} />
           </mesh>
-          <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, bounds.minL - 0.05, bounds.cy]} />
+          <gridHelper args={[bounds.size * 4, Math.round(bounds.size * 4), '#c5ccc6', '#d6dbd6']} position={[bounds.cx, groundY + 0.01, bounds.cy]} />
         </>
       )}
+      {plinth && <SitePlinth plot={plinth.plot} cuts={plinth.cuts} top={bounds.minL - 0.06} bottom={groundY} onClick={() => onSelect(null)} />}
       {real && <GrassField surfaces={surfaces} />}
       {real && layer === 'none' && !showDims && <PostFX />}
       {g && climate.values && <HeatLayer g={g} values={climate.values} ramp={climate.ramp} max={climate.max} opacity={layer === 'sun' ? 0.72 : 0.78} />}
@@ -303,7 +318,7 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
         e.kind === 'wall' ? (
           <WallMesh key={e.id} w={e} openings={openings} selected={selected} onSelect={onSelect} />
         ) : e.kind === 'surface' ? (
-          e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
+          e.stairs ? <StairSurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : e.poly ? <PolySurface key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} /> : <SurfaceMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'fence' ? (
           <FenceMesh key={e.id} f={e} selected={selected === e.id} onSelect={onSelect} />
         ) : e.kind === 'object' ? (

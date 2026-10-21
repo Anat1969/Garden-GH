@@ -21,12 +21,18 @@ test('הפרויקט של שני נוצר אוטומטית, עם מודל, מי�
   await expect(page.locator('.el-item').filter({ hasText: 'קיר בית' }).first()).toBeVisible()
   await page.waitForTimeout(600)
   await page.screenshot({ path: 'shots/16-shani-plan.png' })
+  // מדרגות בתוכנית: קווי שלח וחץ עולה
+  await expect(page.getByTestId('plan-stairs')).toHaveCount(4)
+  await expect(page.getByTestId('plan-stairs').first()).toContainText('עולה')
   await page.getByRole('link', { name: 'מודל תלת-ממדי' }).click()
   await expect(page.getByTestId('model-canvas').locator('canvas')).toBeVisible({ timeout: 20000 })
   await page.waitForTimeout(2500)
   await page.screenshot({ path: 'shots/17-shani-model.png' })
   await page.getByRole('link', { name: 'כתב כמויות' }).click()
+  // מעל 40 שורות הקבוצות נפתחות סגורות
+  await page.getByTestId('bom-table').getByRole('button', { name: 'פתיחת כל הקבוצות' }).click()
   await expect(page.getByTestId('bom-table').getByText('דשא 1').first()).toBeVisible()
+  await expect(page.getByTestId('bom-table').getByText(/מדרגות/).first()).toBeVisible()
   // יצירה חוזרת מהכפתור
   await page.getByRole('button', { name: 'תפריט המערכת' }).click()
   await page.getByRole('link', { name: 'פרויקטים' }).first().click()

@@ -7,6 +7,9 @@ import { bbox } from '../lib/geom'
 import { SurfMat, useSurfaceTexture } from './garden3d'
 import { useModelFinish } from '../lib/finish'
 import { RealCrown, RealPalm, RealTrunk } from './realism3d'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { stairPlan } from '../lib/stairs'
+import polygonClipping from 'polygon-clipping'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -66,6 +69,102 @@ export function PolySurface({ s, selected, onSelect }: { s: Surface; selected: b
     >
       <SurfMat material={s.material} color={s.color} selected={selected} tex={tex} />
     </mesh>
+  )
+}
+
+// ---------- מדרגות: כל שלח מוצק מהמפלס התחתון עד גובהו, וקו דק בשפת כל מדרגה ----------
+
+export function StairSurface({ s, selected, onSelect }: { s: Surface; selected: boolean; onSelect: (id: string) => void }) {
+  const tex = useSurfaceTexture(s.material, s.color, null)
+  const { geom, edges } = useMemo(() => {
+    const plan = stairPlan(s)
+    if (!plan) return { geom: null, edges: null }
+    const parts = plan.steps.map((st) => {
+      const shape = new THREE.Shape(st.poly.map((v) => new THREE.Vector2(v.x, -v.y)))
+      const depth = Math.max(0.05, st.top - plan.bottom + 0.05)
+      const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false })
+      g.rotateX(-Math.PI / 2)
+      g.translate(0, plan.bottom - 0.05, 0)
+      return g
+    })
+    const merged = mergeGeometries(parts, false)
+    parts.forEach((g) => g.dispose())
+    return { geom: merged, edges: merged ? new THREE.EdgesGeometry(merged, 30) : null }
+  }, [s])
+  useEffect(
+    () => () => {
+      geom?.dispose()
+      edges?.dispose()
+    },
+    [geom, edges],
+  )
+  if (!geom) return <PolySurface s={s} selected={selected} onSelect={onSelect} />
+  return (
+    <group>
+      <mesh
+        geometry={geom}
+        receiveShadow
+        castShadow
+        onClick={(ev: ThreeEvent<MouseEvent>) => {
+          ev.stopPropagation()
+          onSelect(s.id)
+        }}
+      >
+        <SurfMat material={s.material} color={s.color} selected={selected} tex={tex} />
+      </mesh>
+      {edges && (
+        <lineSegments geometry={edges}>
+          <lineBasicMaterial color={selected ? '#2f5d4a' : '#6d6a60'} transparent opacity={0.55} />
+        </lineSegments>
+      )}
+    </group>
+  )
+}
+
+// ---------- גוש המגרש: כשמדרגות יורדות אל הרחוב, המגרש מוצג כגוש אדמה עם חתך המדרגות ----------
+
+export function SitePlinth({ plot, cuts, top, bottom, onClick }: { plot: Pt[]; cuts: Pt[][]; top: number; bottom: number; onClick: () => void }) {
+  const { geom, edges } = useMemo(() => {
+    const ring = (ps: Pt[]): [number, number][] => [...ps.map((p) => [p.x, p.y] as [number, number]), [ps[0].x, ps[0].y]]
+    let mp: polygonClipping.MultiPolygon = [[ring(plot)]]
+    try {
+      if (cuts.length) mp = polygonClipping.difference(mp, ...cuts.map((c) => [ring(c)] as polygonClipping.Polygon))
+    } catch {
+      /* חיתוך שנכשל: הגוש בלי חתך */
+    }
+    const shapes = mp.map((poly) => {
+      const sh = new THREE.Shape(poly[0].map(([x, y]) => new THREE.Vector2(x, -y)))
+      for (const h of poly.slice(1)) sh.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x, -y))))
+      return sh
+    })
+    const g = new THREE.ExtrudeGeometry(shapes, { depth: Math.max(0.05, top - bottom), bevelEnabled: false })
+    g.rotateX(-Math.PI / 2)
+    g.translate(0, bottom, 0)
+    return { geom: g, edges: new THREE.EdgesGeometry(g, 30) }
+  }, [plot, cuts, top, bottom])
+  useEffect(
+    () => () => {
+      geom.dispose()
+      edges.dispose()
+    },
+    [geom, edges],
+  )
+  return (
+    <group>
+      <mesh
+        geometry={geom}
+        receiveShadow
+        onClick={(ev: ThreeEvent<MouseEvent>) => {
+          ev.stopPropagation()
+          onClick()
+        }}
+      >
+        <meshStandardMaterial color="#d8d0bf" roughness={1} />
+      </mesh>
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial color="#8f8676" transparent opacity={0.6} />
+      </lineSegments>
+    </group>
   )
 }
 

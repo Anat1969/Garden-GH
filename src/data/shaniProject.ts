@@ -69,8 +69,8 @@ export const SHANI_STRUCTURE: Omit<PlanStructure, 'drawingId' | 'readAt'> = {
   zones: [
     { kind: 'paving', label: 'פטיו מערבי', polygon: westPatio, levelAbs: 698.85 },
     { kind: 'paving', label: 'פטיו מזרחי', polygon: clampE(mirror(westPatio)), levelAbs: 698.85 },
-    { kind: 'stairs', label: 'מדרגות מערביות לרחוב', polygon: westStairs, levelAbs: 698.25 },
-    { kind: 'stairs', label: 'מדרגות מזרחיות לרחוב', polygon: clampE(mirror(westStairs)), levelAbs: 698.25 },
+    { kind: 'stairs', label: 'מדרגות מערביות לרחוב', polygon: westStairs, levelAbs: 698.85, levelToAbs: 694.21, down: 'S' },
+    { kind: 'stairs', label: 'מדרגות מזרחיות לרחוב', polygon: clampE(mirror(westStairs)), levelAbs: 698.85, levelToAbs: 694.3, down: 'S' },
     { kind: 'lawn', label: 'דשא דרום-מערבי', polygon: swLawn, levelAbs: 699.25 },
     { kind: 'lawn', label: 'דשא דרום-מזרחי', polygon: clampE(mirror(swLawn)), levelAbs: 699.25 },
     { kind: 'planting', label: 'ערוגת עץ מערבית', polygon: westPlanter, levelAbs: 699.25 },
@@ -78,8 +78,8 @@ export const SHANI_STRUCTURE: Omit<PlanStructure, 'drawingId' | 'readAt'> = {
     { kind: 'planting', label: 'גינון דרומי עם דקלים', polygon: southPlanting, levelAbs: 699.25 },
     { kind: 'lawn', label: 'דשא צפון-מערבי', polygon: nwLawn, levelAbs: 698.8 },
     { kind: 'lawn', label: 'דשא צפון-מזרחי', polygon: neLawn, levelAbs: 698.8 },
-    { kind: 'stairs', label: 'מדרגות למחסן מערבי', polygon: nwSteps, levelAbs: 698.5 },
-    { kind: 'stairs', label: 'מדרגות למחסן מזרחי', polygon: mirror(nwSteps), levelAbs: 698.5 },
+    { kind: 'stairs', label: 'מדרגות למחסן מערבי', polygon: nwSteps, levelAbs: 698.85, levelToAbs: 698, down: 'N' },
+    { kind: 'stairs', label: 'מדרגות למחסן מזרחי', polygon: mirror(nwSteps), levelAbs: 698.85, levelToAbs: 698, down: 'N' },
     { kind: 'parking', label: 'חניה וחצר כניסה', polygon: northPaving, levelAbs: 698.9 },
   ],
   levels: [
@@ -146,7 +146,7 @@ export const SHANI_BUILDING: Building = {
   source: 'קריאה ידנית של חתכים וחזיתות בהיתר',
 }
 
-export const SHANI_FLAG = 'garden-gh:shani-seeded-v2'
+export const SHANI_FLAG = 'garden-gh:shani-seeded-v3'
 
 export function buildShaniProject(): Project {
   const now = new Date().toISOString()

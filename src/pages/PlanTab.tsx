@@ -8,7 +8,8 @@ import { canRedo, canUndo, redo, removeElement, setPlanScale, uid, undo, updateP
 import { dimLabelText, segLen } from '../lib/dims'
 import type { Element, Fence, GardenLine, GardenObject, Opening, OpeningType, Pt, Sketch, Surface, SurfaceMaterial, Wall } from '../lib/types'
 import { LINES, MATERIALS, OBJECTS, type LineType, type ObjectType } from '../lib/garden'
-import { NO_BASIS, numberedNames } from '../lib/bom'
+import { NO_BASIS, fmtNum, numberedNames } from '../lib/bom'
+import { stairPlan } from '../lib/stairs'
 import { KIND_TEXT } from '../lib/types'
 import { bbox } from '../lib/geom'
 import { boundsOf, elementPoints, handlePoints, setVertex, mergeSameMaterial, moveElement, rdp, rotateElement, scaleElement, setEdgeLength, snapMove, snapSet, snapTo, surfacePoly, surfaceWithEdge } from '../lib/elementGeom'
@@ -1361,6 +1362,7 @@ function PlanShape({ e, sel, k, walls, common, finish }: { e: Element; sel: bool
   switch (e.kind) {
     case 'surface': {
       const fill = line ? '#ffffff' : finish === 'color' ? e.color || MATERIALS[e.material].color : `url(#${patternId(e.material, e.color)})`
+      if (e.stairs && e.poly) return <PlanStairs e={e} sel={sel} k={k} common={common} />
       return e.poly ? (
         <polygon points={e.poly.map((v) => `${v.x},${v.y}`).join(' ')} fill={fill} fillOpacity={0.85} stroke={sel ? selStroke : '#6d6a60'} strokeWidth={k * (sel ? 3 : 1)} {...common} />
       ) : (
@@ -1430,3 +1432,38 @@ function shadeDark(hex: string) {
 }
 
 // תוויות מידה על התוכנית: אורך קירות, גדרות ואלמנטים קוויים, שטח משטחים, מידות פריטים. מוצגות רק לפי בקשה
+
+// מדרגות בתוכנית כמו בשרטוט: קו לכל שלח, קו מרכז עם חץ לכיוון העלייה, והמילה "עולה" עם מספר המדרגות
+function PlanStairs({ e, sel, k, common }: { e: Surface; sel: boolean; k: number; common: { onPointerDown: (ev: React.PointerEvent) => void; style: React.CSSProperties } }) {
+  const plan = stairPlan(e)
+  const ink = sel ? '#1d2120' : '#4a4740'
+  const poly = e.poly!.map((v) => `${v.x},${v.y}`).join(' ')
+  if (!plan) return <polygon points={poly} fill="#efebe2" stroke={ink} strokeWidth={k} {...common} />
+  const { a, b } = plan.axis
+  const L = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const ux = (b.x - a.x) / L
+  const uy = (b.y - a.y) / L
+  const ah = Math.min(0.45, L * 0.2)
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+  let rot = (Math.atan2(uy, ux) * 180) / Math.PI
+  if (rot >= 90) rot -= 180
+  if (rot < -90) rot += 180
+  const fs = Math.min(k * 10, Math.max(0.12, L / 12))
+  return (
+    <g data-testid="plan-stairs" {...common}>
+      <title>{`${plan.count} מדרגות, רום ${fmtNum(plan.riser * 100)} ס"מ, שלח ${fmtNum(plan.tread * 100)} ס"מ, ממפלס ${fmtNum(plan.bottom)} עד ${fmtNum(e.level)} (מוערך)`}</title>
+      <polygon points={poly} fill="#f3efe6" stroke={ink} strokeWidth={k * (sel ? 2.4 : 1.2)} />
+      {plan.steps.slice(1).map((st, i) => {
+        // קו השלח: הצלע של הרצועה שקרובה לתחילת המדרגות
+        const pts = st.poly
+        return <polyline key={i} points={pts.map((v) => `${v.x},${v.y}`).join(' ')} fill="none" stroke={ink} strokeWidth={k * 0.7} opacity={0.75} />
+      })}
+      <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={ink} strokeWidth={k} />
+      <circle cx={a.x} cy={a.y} r={k * 3} fill={ink} />
+      <polyline points={`${b.x - ux * ah - uy * ah * 0.5},${b.y - uy * ah + ux * ah * 0.5} ${b.x},${b.y} ${b.x - ux * ah + uy * ah * 0.5},${b.y - uy * ah - ux * ah * 0.5}`} fill="none" stroke={ink} strokeWidth={k * 1.2} strokeLinejoin="round" />
+      <text x={mid.x} y={mid.y} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={ink} stroke="#f3efe6" strokeWidth={k * 3} paintOrder="stroke" transform={`rotate(${rot} ${mid.x} ${mid.y})`} pointerEvents="none" style={{ fontFamily: 'IBM Plex Sans Hebrew, sans-serif' }}>
+        {`עולה · ${plan.count} מדרגות`}
+      </text>
+    </g>
+  )
+}

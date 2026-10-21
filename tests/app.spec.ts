@@ -46,11 +46,11 @@ test('המסלול המרכזי: היתר, זיהוי, תוכנית, מודל, �
   await page.screenshot({ path: 'shots/01-home.png', fullPage: true })
 
   // הדגמת המסלול: מעבר בין שלבים
-  for (const st of ['קירות ופתחים', 'גינה ומפלסים', 'מודל תלת-ממדי', 'כתב כמויות', 'שלבים וחלופות', 'פרויקט והיתר']) {
+  for (const st of ['קירות ופתחים', 'תכנון הגינה', 'מודל ואקלים', 'כמויות ותקציב', 'הגשה וחלופות', 'פרויקט והיתר']) {
     await page.getByTestId('route-demo').getByRole('button', { name: new RegExp(st) }).click()
     await expect(page.getByTestId('route-demo').locator('.demo-caption')).toContainText(st)
   }
-  await page.getByTestId('route-demo').getByRole('button', { name: /כתב כמויות/ }).click()
+  await page.getByTestId('route-demo').getByRole('button', { name: /כמויות ותקציב/ }).click()
   await expect(page.getByTestId('demo-bom')).toContainText('הערכה בלבד')
 
   // תפריט המערכת בלוגו
@@ -221,8 +221,8 @@ test('מובייל 390: בלי גלילה אופקית בכל הדפים', async
   await page.getByRole('button', { name: 'זיהוי אוטומטי' }).click()
   await page.getByRole('button', { name: 'לבדיקה ותיקון' }).click()
   await page.getByRole('button', { name: /אישור כל הקירות/ }).click()
-  for (const tab of ['פרטים ודרישות', 'היתר', 'תכנון הגינה', 'תוכנית ועריכה', 'מודל תלת-ממדי', 'כתב כמויות', 'שלבים ותקציב', 'חלופות']) {
-    await page.getByRole('link', { name: tab, exact: true }).click()
+  for (const tab of ['פרטים ודרישות', 'היתר', 'תכנון הגינה', 'תוכנית ועריכה', 'מודל תלת-ממדי ואקלים', 'כתב כמויות', 'שלבים ותקציב', 'גליון להדפסה', 'חלופות']) {
+    await page.locator('.stage-group').getByRole('link', { name: new RegExp(`(^|\\s)${tab}(\\s|$)`) }).first().click()
     await page.waitForTimeout(700)
     await noHorizontalScroll(page)
     await page.screenshot({ path: `shots/m-tab-${tab}.png`, fullPage: true })
