@@ -320,7 +320,9 @@ export interface Project {
   id: string
   name: string
   address: string
+  city?: string // עיר שנבחרה ידנית (כשלא זוהתה מהכתובת)
   north: number
+  northSet?: boolean // כיוון הצפון אושר או הוזן ידנית
   soil: string
   levelsNote: string
   permit: Permit | null

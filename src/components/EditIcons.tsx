@@ -179,6 +179,14 @@ export const EDIT_ICONS = {
       <path d="M12 11v5M12 8v.01" />
     </>
   ),
+  play: <path d="M8 5.5v13l10-6.5z" />,
+  pause: <path d="M8.5 5.5v13M15.5 5.5v13" />,
+  camera: (
+    <>
+      <path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5h2.5l1.5-2h5l1.5 2h2.5A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>
+  ),
 } as const
 
 export type EditIconId = keyof typeof EDIT_ICONS

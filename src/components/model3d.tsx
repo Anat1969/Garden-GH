@@ -1,11 +1,13 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
-import type { Building, Project, Pt, Surface } from '../lib/types'
+import type { Building, Pt, Surface } from '../lib/types'
 import { MATERIALS } from '../lib/garden'
-import { bbox, simplify } from '../lib/geom'
+import { bbox } from '../lib/geom'
 import { SurfMat, useSurfaceTexture } from './garden3d'
 import { useModelFinish } from '../lib/finish'
+import { PlasterMat, RealCrown, RealPalm, RealTrunk } from './realism3d'
+import { roofTilePBR } from '../lib/realism'
 
 // ---------- תווית טקסט במרחב ----------
 
@@ -79,14 +81,15 @@ export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Buildin
         <group key={i}>
           {eave && <UpperBlock fp={fp} z0={b.groundHeight} z1={eave} />}
           {eave && ridge && (b.roofType === 'gable' || b.roofType === 'mixed' || b.roofType === 'hip') && <Gable fp={fp} eave={eave} ridge={ridge} />}
-          {eave && (!ridge || b.roofType === 'flat') && <UpperBlock fp={fp} z0={eave} z1={eave + 0.25} color="#a9aca8" />}
+          {eave && (!ridge || b.roofType === 'flat') && <UpperBlock fp={fp} z0={eave} z1={eave + 0.25} color="#a9aca8" roof />}
         </group>
       ))}
     </>
   )
 }
 
-function UpperBlock({ fp, z0, z1, color = '#c9cbc7' }: { fp: Pt[]; z0: number; z1: number; color?: string }) {
+function UpperBlock({ fp, z0, z1, color = '#c9cbc7', roof }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
+  const real = useModelFinish() === 'detailed'
   const geom = useMemo(() => {
     const shape = new THREE.Shape(fp.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false })
@@ -96,7 +99,7 @@ function UpperBlock({ fp, z0, z1, color = '#c9cbc7' }: { fp: Pt[]; z0: number; z
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} position={[0, z0, 0]} castShadow receiveShadow>
-      <meshStandardMaterial color={color} roughness={0.92} />
+      {real && !roof ? <PlasterMat L={1} H={1} /> : <meshStandardMaterial color={real && roof ? '#9b9890' : color} roughness={0.92} />}
     </mesh>
   )
 }
@@ -126,13 +129,28 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
     }
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+    // UV לרעפים: לאורך הרכס ובמורד השיפוע, במטרים
+    const uv: number[] = []
+    const mid = alongX ? (z0 + z1) / 2 : (x0 + x1) / 2
+    for (let i = 0; i < v.length; i += 3) {
+      const [x, y, z] = [v[i], v[i + 1], v[i + 2]]
+      const across = alongX ? z - mid : x - mid
+      uv.push((alongX ? x : z) / 1.6, Math.hypot(across, y - ridge) / 1.6)
+    }
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
     g.computeVertexNormals()
     return g
   }, [fp, eave, ridge])
   useEffect(() => () => geom.dispose(), [geom])
+  const real = useModelFinish() === 'detailed'
+  const tiles = real ? roofTilePBR() : null
   return (
-    <mesh geometry={geom} castShadow>
-      <meshStandardMaterial color="#9a9d99" roughness={0.85} side={THREE.DoubleSide} />
+    <mesh geometry={geom} castShadow receiveShadow>
+      {tiles ? (
+        <meshStandardMaterial map={tiles.map} normalMap={tiles.normalMap} normalScale={new THREE.Vector2(1.6, 1.6)} roughnessMap={tiles.roughnessMap} side={THREE.DoubleSide} />
+      ) : (
+        <meshStandardMaterial color="#9a9d99" roughness={0.85} side={THREE.DoubleSide} />
+      )}
     </mesh>
   )
 }
@@ -140,8 +158,32 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
 // ---------- עצים ----------
 
 export function Tree({ at, r, kind, level }: { at: Pt; r: number; kind: 'tree' | 'palm' | 'shrub'; level: number }) {
-  const massing = useModelFinish() === 'massing'
+  const finish = useModelFinish()
+  const massing = finish === 'massing'
   const rr = Math.min(Math.max(r, 0.4), 5)
+  if (finish === 'detailed') {
+    const seed = Math.round(at.x * 7 + at.y * 13)
+    if (kind === 'shrub')
+      return (
+        <group position={[at.x, level + rr * 0.45, at.y]}>
+          <RealCrown r={rr * 0.6} color="#6f9a5f" seed={seed} flat={0.8} />
+        </group>
+      )
+    if (kind === 'palm')
+      return (
+        <group position={[at.x, level, at.y]}>
+          <RealPalm h={4.8} r={rr * 0.9} color="#5e8a4e" />
+        </group>
+      )
+    return (
+      <group position={[at.x, level, at.y]}>
+        <RealTrunk h={2.2 + rr * 0.4} />
+        <group position={[0, 2.2 + rr * 0.7, 0]}>
+          <RealCrown r={rr * 0.85} color="#4f7d47" seed={seed} flat={0.85} />
+        </group>
+      </group>
+    )
+  }
   if (kind === 'shrub')
     return (
       <mesh position={[at.x, level + rr * 0.45, at.y]} castShadow>
@@ -193,10 +235,4 @@ export function NorthArrow({ deg, at, size }: { deg: number; at: Pt; size: numbe
   )
 }
 
-// מצולעי היחידות במטרים, מתוך קריאת המבנה
-export function unitFootprints(p: Project): Pt[][] {
-  const s = p.permit?.structure
-  const mpp = p.permit?.scale.metersPerPt
-  if (!s || !mpp) return []
-  return s.units.map((u) => simplify(u.footprint.map((v) => ({ x: v.x * mpp, y: v.y * mpp })), 0.05)).filter((f) => f.length >= 3)
-}
+export { unitFootprints } from '../lib/structureToElements'

@@ -523,3 +523,26 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
   .main-nav { order: 10; width: 100%; margin: 0; justify-content: space-between; border-top: 1px solid var(--line); padding-top: 6px; }
   .nav-tab { flex: 1 1 0; text-align: center; padding: 6px 4px; font-size: 14px; }
 }
+
+/* ניתוח אקלים */
+.climate-panel { display: grid; gap: 10px; }
+.climate-body { display: grid; gap: 10px; }
+.climate-site { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; align-items: center; }
+.climate-site .btn { margin-inline-start: 6px; }
+.sun-time { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; }
+.sun-time input[type=range] { flex: 1 1 220px; min-width: 160px; accent-color: #e07b2c; }
+.wind-regime { font-size: 14px; display: grid; gap: 2px; }
+.climate-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.climate-stats .stat { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; display: grid; gap: 2px; background: #fbfbf9; font-size: 13px; }
+.climate-stats .stat b { font-size: 17px; }
+.climate-stats .stat.good { border-color: #b9d8c4; background: #f3faf5; }
+.climate-stats .stat.warn { border-color: #ecd29a; background: #fdf8ec; }
+.climate-legend { display: grid; gap: 4px; font-size: 12px; max-width: 420px; }
+.climate-legend .ramp { height: 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,.08); }
+@media (max-width: 760px) {
+  .climate-panel .tool-group { flex-wrap: wrap; }
+  .climate-site { font-size: 13px; }
+}
+.climate-insights { display: grid; gap: 8px; }
+.climate-insights .climate-stats { grid-template-columns: 1fr 1fr; }
+.climate-insights .climate-stats .stat b { font-size: 15px; }
