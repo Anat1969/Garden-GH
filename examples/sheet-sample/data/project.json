@@ -1,0 +1,20 @@
+{
+  "title_he": "בית הזית",
+  "subtitle_he": "בית בטון חשוף בשתי קומות, פתוח דרומה אל גינה ירוקת זית",
+  "studio": { "name_he": "סטודיו לאדריכלות ונוף", "address_he": "רחוב הנביאים 12, ירושלים" },
+  "address_he": "רחוב הזית 3, מודיעין",
+  "plot": { "gush": "5891", "helka": "112", "area_m2": 286, "rect": { "x": -3, "y": -3, "w": 13, "h": 22 } },
+  "areas": { "built_area_gross_m2": 140, "garden_area_m2": 216, "plot_area_m2": 286 },
+  "year": 2026,
+  "planner_he": "סטודיו לאדריכלות ונוף",
+  "scale": "1:100",
+  "drawing_no": "A-101",
+  "date": "2026-10-21",
+  "assumptions": [
+    { "key": "floor_height_m", "value": 3.2, "source": "assumption", "note_he": "גובה קומה טיפוסי, רצפה עד רצפה" },
+    { "key": "wall_exterior_m", "value": 0.25, "source": "assumption", "note_he": "קיר בטון חשוף עם בידוד פנימי" },
+    { "key": "wall_interior_m", "value": 0.12, "source": "assumption", "note_he": "קירות בלוק פנימיים" },
+    { "key": "north_deg", "value": 0, "source": "assumption", "note_he": "הצפון כלפי מעלה הגיליון" },
+    { "key": "garden_area_m2", "value": 216, "source": "assumption", "note_he": "שטח המגרש פחות תכסית המבנה" }
+  ]
+}

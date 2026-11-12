@@ -1,0 +1,70 @@
+{
+  "north_deg": 0,
+  "wall_thickness_m": { "exterior": 0.25, "interior": 0.12 },
+  "footprint": { "x": 0, "y": 0, "w": 7, "h": 10 },
+  "floors": [
+    {
+      "id": "ground",
+      "name_he": "קומת קרקע",
+      "level_m": 0,
+      "height_m": 3.2,
+      "areas_total_m2": 70,
+      "rooms": [
+        { "name_he": "מבואה ומדרגות", "x": 0, "y": 0, "w": 2.5, "h": 4 },
+        { "name_he": "מטבח", "x": 2.5, "y": 0, "w": 4.5, "h": 4 },
+        { "name_he": "שירותי אורחים", "x": 0, "y": 4, "w": 2.5, "h": 2 },
+        { "name_he": "חדר עבודה", "x": 0, "y": 6, "w": 2.5, "h": 4 },
+        { "name_he": "סלון ופינת אוכל", "x": 2.5, "y": 4, "w": 4.5, "h": 6 }
+      ],
+      "openings": [
+        { "type": "door", "side": "N", "offset_m": 0.7, "width_m": 1.1 },
+        { "type": "window", "side": "N", "offset_m": 4.0, "width_m": 1.6, "sill_m": 1.0, "height_m": 1.2 },
+        { "type": "window", "side": "E", "offset_m": 1.2, "width_m": 1.6 },
+        { "type": "sliding", "side": "S", "offset_m": 2.9, "width_m": 3.8, "sill_m": 0, "height_m": 2.6 },
+        { "type": "window", "side": "S", "offset_m": 0.6, "width_m": 1.3 },
+        { "type": "window", "side": "W", "offset_m": 7.2, "width_m": 1.2 },
+        { "type": "window", "side": "E", "offset_m": 6.0, "width_m": 2.0, "sill_m": 0.5, "height_m": 1.9 },
+        { "type": "door", "x": 2.5, "y": 2.6, "orient": "v", "width_m": 0.9 },
+        { "type": "door", "x": 1.25, "y": 4, "orient": "h", "width_m": 0.8 },
+        { "type": "door", "x": 1.25, "y": 6, "orient": "h", "width_m": 0.9 },
+        { "type": "door", "x": 2.5, "y": 8.0, "orient": "v", "width_m": 0.9 }
+      ]
+    },
+    {
+      "id": "first",
+      "name_he": "קומה א׳",
+      "level_m": 3.2,
+      "height_m": 3.2,
+      "areas_total_m2": 70,
+      "rooms": [
+        { "name_he": "מדרגות ומעבר", "x": 0, "y": 0, "w": 2.5, "h": 5 },
+        { "name_he": "רחצה", "x": 2.5, "y": 0, "w": 2, "h": 3 },
+        { "name_he": "חדר ילדים", "x": 4.5, "y": 0, "w": 2.5, "h": 5 },
+        { "name_he": "כביסה", "x": 2.5, "y": 3, "w": 2, "h": 2 },
+        { "name_he": "חדר שינה הורים", "x": 0, "y": 5, "w": 4.5, "h": 5 },
+        { "name_he": "רחצה הורים", "x": 4.5, "y": 5, "w": 2.5, "h": 2.5 },
+        { "name_he": "חדר עבודה", "x": 4.5, "y": 7.5, "w": 2.5, "h": 2.5 }
+      ],
+      "openings": [
+        { "type": "window", "side": "N", "offset_m": 3.0, "width_m": 0.8, "sill_m": 1.4, "height_m": 0.8 },
+        { "type": "window", "side": "N", "offset_m": 5.0, "width_m": 1.4 },
+        { "type": "window", "side": "E", "offset_m": 1.8, "width_m": 1.2 },
+        { "type": "window", "side": "W", "offset_m": 1.5, "width_m": 1.0, "sill_m": 0.6, "height_m": 2.0 },
+        { "type": "window", "side": "W", "offset_m": 6.5, "width_m": 1.4 },
+        { "type": "sliding", "side": "S", "offset_m": 0.7, "width_m": 3.0, "sill_m": 0, "height_m": 2.4 },
+        { "type": "window", "side": "S", "offset_m": 5.0, "width_m": 1.5 },
+        { "type": "door", "x": 2.5, "y": 1.5, "orient": "v", "width_m": 0.8 },
+        { "type": "door", "x": 2.5, "y": 4.0, "orient": "v", "width_m": 0.8 },
+        { "type": "door", "x": 4.5, "y": 2.5, "orient": "v", "width_m": 0.8 },
+        { "type": "door", "x": 1.25, "y": 5, "orient": "h", "width_m": 0.9 },
+        { "type": "door", "x": 4.5, "y": 6.2, "orient": "v", "width_m": 0.8 },
+        { "type": "door", "x": 4.5, "y": 8.8, "orient": "v", "width_m": 0.8 }
+      ]
+    }
+  ],
+  "trees": [
+    { "name_he": "זית", "x": -0.8, "y": 14.6, "r": 2.2, "h": 5.2 },
+    { "name_he": "תאנה", "x": 8.0, "y": 15.6, "r": 1.9, "h": 4.2 },
+    { "name_he": "חרוב", "x": 4.2, "y": 17.4, "r": 1.4, "h": 3.6 }
+  ]
+}
