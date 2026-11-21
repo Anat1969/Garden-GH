@@ -407,4 +407,5 @@ export interface ProjectLocation {
   zoom: number
   source: 'address' | 'pin' | 'manual'
   label?: string // הכתובת שנמצאה
+  precision?: 'house' | 'street' | 'city' // מה בדיוק נמצא בחיפוש הכתובת
 }

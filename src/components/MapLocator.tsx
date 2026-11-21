@@ -5,7 +5,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Project, ProjectLocation } from '../lib/types'
 import { updateProject } from '../lib/store'
-import { fmtCoord, geocode, googleEmbedUrl, googleMapsUrl, googleSatUrl, govmapUrl, toITM, type GeoHit } from '../lib/geo'
+import { PRECISION_TEXT, PRECISION_ZOOM, fmtCoord, geocode, googleEmbedUrl, googleMapsUrl, googleSatUrl, govmapUrl, toITM, type GeoHit } from '../lib/geo'
 import { IconBtn } from './EditIcons'
 import { toast } from './ui'
 
@@ -95,26 +95,40 @@ export function MapLocator({ project }: { project: Project }) {
     } else marker.current.setLatLng([loc.lat, loc.lon])
   }, [loc?.lat, loc?.lon]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const search = async () => {
-    if (!q.trim()) return
+  const place = (h: GeoHit) => {
+    save({ lat: h.lat, lon: h.lon, zoom: PRECISION_ZOOM[h.precision], source: 'address', label: h.label, precision: h.precision })
+    map.current?.setView([h.lat, h.lon], PRECISION_ZOOM[h.precision])
+  }
+  // auto: חיפוש שהאפליקציה עושה לבד כשיש כתובת ואין מיקום. כישלון שלו לא מציג שגיאה אדומה.
+  const search = async (text = q, auto = false) => {
+    if (!text.trim()) return
     setBusy(true)
     setErr(null)
     try {
-      const r = await geocode(q)
+      const r = await geocode(text)
       setHits(r)
-      if (!r.length) setErr('לא נמצאה הכתובת. נסו בלי מספר בית, או דקרו על המפה.')
+      if (!r.length) setErr('הכתובת לא נמצאה במפה. בדקי את שם הרחוב והיישוב, או דקרי על המפה.')
       else {
-        const h = r[0]
-        save({ lat: h.lat, lon: h.lon, zoom: 18, source: 'address', label: h.label })
-        map.current?.setView([h.lat, h.lon], 18)
-        toast('הפרויקט מוקם לפי הכתובת. אפשר לדייק בדקירה או בגרירת הסיכה')
+        place(r[0])
+        toast(r[0].precision === 'house' ? 'הפרויקט מוקם לפי הכתובת' : `${PRECISION_TEXT[r[0].precision]}. מדייקים בגרירת הסיכה אל הבית`)
       }
     } catch (e) {
-      setErr(`${(e as Error).message}. אפשר לדקור על המפה במקום.`)
+      if (!auto) setErr(`${(e as Error).message}. אפשר לדקור על המפה במקום.`)
     } finally {
       setBusy(false)
     }
   }
+
+  // כתובת שהוזנה בפרויקט מחופשת לבד: כשעוד אין מיקום, וכשהכתובת השתנתה אחרי מיקום לפי כתובת
+  const searched = useRef<string | null>(loc ? project.address : null)
+  useEffect(() => {
+    const addr = project.address?.trim()
+    if (!addr || searched.current === addr) return
+    if (loc && loc.source !== 'address') return
+    searched.current = addr
+    setQ(addr)
+    void search(addr, true)
+  }, [project.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyCoords = () => {
     const a = Number(lat)
@@ -147,6 +161,11 @@ export function MapLocator({ project }: { project: Project }) {
         <input className="input" style={{ flex: '1 1 240px' }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="רחוב, מספר, עיר" aria-label="כתובת לחיפוש במפה" />
         <IconBtn icon="focus" label={busy ? 'מחפש...' : 'חיפוש במפה'} type="submit" className="primary" disabled={busy} testId="map-search" />
       </form>
+      {loc?.source === 'address' && loc.precision && loc.precision !== 'house' && (
+        <div className="notice" style={{ marginTop: 8 }} data-testid="map-precision">
+          <b>{PRECISION_TEXT[loc.precision]}.</b> מספרי בתים חסרים במפה הפתוחה בחלק מהרחובות. <b>גוררים את הסיכה אל הבית</b>, או דוקרים עליו בתצלום האוויר.
+        </div>
+      )}
       {hits.length > 1 && (
         <div className="map-hits" role="list" aria-label="תוצאות חיפוש">
           {hits.map((h) => (
@@ -155,10 +174,7 @@ export function MapLocator({ project }: { project: Project }) {
               type="button"
               role="listitem"
               className="chip"
-              onClick={() => {
-                save({ lat: h.lat, lon: h.lon, zoom: 18, source: 'address', label: h.label })
-                map.current?.setView([h.lat, h.lon], 18)
-              }}
+              onClick={() => place(h)}
             >
               {h.label.split(',').slice(0, 3).join(',')}
             </button>
