@@ -1,3 +1,4 @@
+import { FacadesPanel } from '../components/FacadesPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
@@ -428,6 +429,8 @@ export default function PermitTab() {
           </div>
         </>
       )}
+
+      <FacadesPanel project={project} />
 
       <div className="card">
         <div className="h-section" style={{ marginBottom: 4 }}>

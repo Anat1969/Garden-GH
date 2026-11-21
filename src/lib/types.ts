@@ -151,6 +151,25 @@ export interface Building {
   source: string
 }
 
+export type FacadeSide = 'N' | 'S' | 'E' | 'W'
+
+// שרטוט חזית מההיתר, מולבש על הבית בהיטל ישר. התמונה נשמרת במכשיר לפי id. המיקומים הם חלקים מרוחב ומגובה התמונה.
+export interface Facade {
+  id: string
+  drawingId?: string
+  title: string
+  side: FacadeSide | null
+  w: number
+  h: number
+  x0: number // הקיר השמאלי של הבית בשרטוט
+  x1: number // הקיר הימני
+  yGround: number // קו ±0.00
+  yTop: number // ראש הבניין
+  topRel: number // הגובה במטרים ש-yTop מייצג
+  how: string // איך נקבע המיקום
+  addedAt: string
+}
+
 export interface DimScale {
   page: number
   metersPerPt: number
@@ -337,6 +356,7 @@ export interface Project {
   // שדות שמולאו מקריאת ההיתר: שם השדה ומאיפה חולץ. עריכה ידנית מסירה את הסימון
   extracted?: Partial<Record<'north' | 'levelsNote' | 'plotArea' | 'baseLevel', string>>
   building?: Building
+  facades?: Facade[] // חזיתות ההיתר שמולבשות על הבית במודל
   variants: Variant[]
   activeVariantId: string
   createdAt: string

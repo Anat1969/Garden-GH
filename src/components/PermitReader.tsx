@@ -1,3 +1,4 @@
+import { addFacade } from '../lib/facades'
 import { DataTable } from './DataTable'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -129,6 +130,26 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     if (r.errors.length) note(r.errors[0])
   }
 
+  // חזיתות: כל שרטוט חזית נחתך מהגיליון ונשמר להלבשה על הבית במודל
+  const doFacades = async (list: Drawing[]) => {
+    const targets = list.filter((d) => d.kind === 'elevation').slice(0, 6)
+    if (!targets.length) return
+    const sc = latest().permit?.scale
+    let n = 0
+    for (const d of targets) {
+      setBusy(`חותכת חזית: ${d.title || 'חזית'}`)
+      try {
+        const { canvas, scale } = await renderRegion(doc, d.page, d.box, 2400)
+        // קנה המידה של החזית יכול להיות שונה משל התוכנית
+        const mpp = sc?.metersPerPt ? sc.metersPerPt * (d.scaleDen && sc.den ? d.scaleDen / sc.den : 1) : null
+        if (await addFacade(project.id, canvas, { title: d.title || 'חזית', drawingId: d.id, mPerPx: mpp ? mpp / scale : null })) n++
+      } catch {
+        // חזית שלא נחתכה לא עוצרת את הקריאה
+      }
+    }
+    if (n) note(`${n} חזיתות נחתכו מההיתר ומולבשות על הבית במודל`)
+  }
+
   const doDims = async (d: Drawing) => {
     setBusy(`קוראת מידות: ${d.title || 'תוכנית'}`)
     const r = await readPageWithAi(doc, d.page, latest().permit!.sourceType === 'image', 'normal', uid, () => undefined, d.box)
@@ -176,6 +197,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       await doHeights(list)
       await doDims(g)
       buildElements()
+      await doFacades(list)
     }, 'קריאת ההיתר הסתיימה')
 
   const b = project.building
