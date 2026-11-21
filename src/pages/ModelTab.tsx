@@ -1,3 +1,4 @@
+import { projectFacades, wallTop } from '../lib/facades'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls as OrbitImpl } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -12,7 +13,7 @@ import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTextur
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
-import { BuildingMass, HouseMat, NorthArrow, FlatText, GroundDim, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
+import { BuildingMass, FacadeSkins, HouseMat, NorthArrow, FlatText, GroundDim, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { stairPlan } from '../lib/stairs'
 import { LABEL_TEXT } from '../lib/types'
@@ -233,7 +234,7 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
   )
 }
 
-function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view }: { project: Project; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
+function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view, facadesOn }: { project: Project; facadesOn: boolean; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
   const finish = useModelFinish()
   const real = finish === 'detailed'
   const elements = useMemo(() => {
@@ -338,6 +339,7 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
         ) : null,
       )}
       {project.building && footprints.length > 0 && !groundSel && <BuildingMass footprints={footprints} b={project.building} />}
+      {facadesOn && footprints.length > 0 && !groundSel && <FacadeSkins facades={projectFacades(project)} footprints={footprints} north={project.north || 0} top={wallTop(project.building)} />}
       {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
       {(showDims || selected) && <GroundDims elements={showDims ? elements : elements.filter((e) => e.id === selected)} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} selected={selected} onPick={(id) => onSelect(id)} />}
       {showDims && <SideDims elements={elements} k={Math.max(0.38, bounds.size * 0.022)} y={Math.max(0.02, bounds.minL)} />}
@@ -569,6 +571,8 @@ export default function ModelTab() {
   const names = useMemo(() => numberedNames(variant.elements), [variant.elements])
   const selected = variant.elements.find((e) => e.id === selId) ?? null
   const [showDims, setShowDims] = useState(false)
+  const [facadesOn, setFacadesOn] = useState(true)
+  const hasFacades = projectFacades(project).length > 0
   const [finish, setFinish] = useFinish<ModelFinish>('model', 'detailed')
   const [focusKey, setFocusKey] = useState(0)
   const [view, setView] = useState<{ id: ViewPreset; key: number }>({ id: 'bird', key: 0 })
@@ -662,7 +666,7 @@ export default function ModelTab() {
       <div className="model-box" data-testid="model-canvas">
         <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
-            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
+            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} facadesOn={facadesOn && hasFacades} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
             <AutoSnapshot projectId={project.id} version={`${variant.id}:${variant.elements.length}:${finish}:${project.updatedAt}`} enabled={climateState.st.layer === 'none' && !selId && !showDims} />
           </ModelFinishCtx.Provider>
         </Canvas>
@@ -676,6 +680,11 @@ export default function ModelTab() {
               </button>
             ))}
           </span>
+          {hasFacades && (
+            <button type="button" className={`btn small ${facadesOn ? 'active' : ''}`} aria-pressed={facadesOn} onClick={() => setFacadesOn((v) => !v)} title="שרטוטי החזית מההיתר, מולבשים על קירות הבית בהיטל ישר" data-testid="facades-toggle">
+              חזיתות ההיתר
+            </button>
+          )}
           <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
             {MODEL_FINISH.map((f) => (
               <button key={f.id} type="button" role="radio" aria-checked={finish === f.id} className={`btn small ${finish === f.id ? 'active' : ''}`} onClick={() => setFinish(f.id)} title={f.d}>
@@ -698,6 +707,13 @@ export default function ModelTab() {
         </div>
       </div>
       <aside className="side">
+        {hasFacades && facadesOn && (
+          <div className="notice info" style={{ marginBottom: 10, fontSize: 13 }} data-testid="facades-note">
+            <b>עובדה:</b> החזיתות הן שרטוטי ההיתר עצמם, מולבשים על קירות הבית בהיטל ישר.
+            <br />
+            <b>הערכה:</b> מיקום הבניין בתוך כל שרטוט וקו ±0.00 זוהו אוטומטית. מתקנים במסך ההיתר, בסעיף "חזיתות ההיתר".
+          </div>
+        )}
         <div className="card flat side-req">
           <RequirementsSummary project={project} variant={variant} />
         </div>

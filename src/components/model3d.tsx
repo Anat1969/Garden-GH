@@ -1,7 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
-import type { ThreeEvent } from '@react-three/fiber'
-import type { Building, Pt, Surface } from '../lib/types'
+import { useThree, type ThreeEvent } from '@react-three/fiber'
+import type { Building, Facade, FacadeSide, Pt, Surface } from '../lib/types'
+import { facadeQuads } from '../lib/facades'
+import { loadDocBlob } from '../lib/idb'
 import { MATERIALS } from '../lib/garden'
 import { bbox } from '../lib/geom'
 import { SurfMat, useSurfaceTexture } from './garden3d'
@@ -433,3 +435,63 @@ export function NorthArrow({ deg, at, size }: { deg: number; at: Pt; size: numbe
 }
 
 export { unitFootprints } from '../lib/structureToElements'
+
+// ---------- חזיתות ההיתר על הבית ----------
+// שכבה דקה מחוץ לקירות, עם שרטוט החזית בהיטל ישר. התמונה נטענת מהמכשיר. חזית בלי תמונה לא מוצגת.
+
+export function FacadeSkins({ facades, footprints, north, top }: { facades: Facade[]; footprints: Pt[][]; north: number; top: number }) {
+  const sides = useMemo(() => facades.map((f) => f.side).filter((s): s is FacadeSide => Boolean(s)), [facades])
+  return (
+    <>
+      {facades.map((f) => (
+        <FacadeSkin key={f.id} f={f} footprints={footprints} north={north} top={top} sides={sides} />
+      ))}
+    </>
+  )
+}
+
+function FacadeSkin({ f, footprints, north, top, sides }: { f: Facade; footprints: Pt[][]; north: number; top: number; sides: FacadeSide[] }) {
+  const invalidate = useThree((s) => s.invalidate)
+  const [tex, setTex] = useState<THREE.Texture | null>(null)
+  useEffect(() => {
+    let dead = false
+    let url = ''
+    let t: THREE.Texture | null = null
+    void loadDocBlob(f.id).then((blob) => {
+      if (dead || !blob) return
+      url = URL.createObjectURL(blob)
+      t = new THREE.TextureLoader().load(url, () => {
+        if (dead) return
+        setTex(t)
+        invalidate()
+      })
+      t.colorSpace = THREE.SRGBColorSpace
+      t.anisotropy = 8
+    })
+    return () => {
+      dead = true
+      t?.dispose()
+      if (url) URL.revokeObjectURL(url)
+      setTex(null)
+    }
+  }, [f.id, invalidate])
+  const geom = useMemo(() => {
+    const quads = facadeQuads(f, footprints, north, top, sides)
+    if (!quads.length) return null
+    const pos: number[] = []
+    const uv: number[] = []
+    for (const q of quads) for (const i of [0, 1, 2, 0, 2, 3]) (pos.push(...q.pos[i]), uv.push(...q.uv[i]))
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+    g.computeVertexNormals()
+    return g
+  }, [f, footprints, north, top, sides])
+  useEffect(() => () => geom?.dispose(), [geom])
+  if (!geom || !tex) return null
+  return (
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial map={tex} roughness={0.95} side={THREE.DoubleSide} />
+    </mesh>
+  )
+}
