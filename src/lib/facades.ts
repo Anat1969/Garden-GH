@@ -186,7 +186,8 @@ export interface FacadeQuad {
 
 // לכל חזית: הקירות החיצוניים שפונים לכיוונה, עם קואורדינטות תמונה בהיטל ישר
 // sides: כל הצדדים שיש להם חזית. כל קיר מקבל רק את החזית שפונה אליו הכי ישר, כדי שלא יולבשו שתי חזיתות על קיר אחד.
-export function facadeQuads(f: Facade, footprints: Pt[][], north: number, top: number, sides: FacadeSide[] = SIDES, offset = 0.05): FacadeQuad[] {
+export function facadeQuads(f: Facade, layers: { fps: Pt[][]; z0: number; z1: number }[], north: number, sides: FacadeSide[] = SIDES, offset = 0.05): FacadeQuad[] {
+  const footprints = layers.flatMap((l) => l.fps)
   if (!f.side || !footprints.length || f.topRel <= 0 || f.x1 <= f.x0 || f.yGround <= f.yTop) return []
   const { r } = sideAxes(f.side, north)
   const normals = [...new Set([...sides, f.side])].map((sd) => ({ sd, n: sideAxes(sd, north).n }))
@@ -197,7 +198,7 @@ export function facadeQuads(f: Facade, footprints: Pt[][], north: number, top: n
   const u = (p: Pt) => f.x0 + ((p.x * r.x + p.y * r.y - s0) / (s1 - s0)) * (f.x1 - f.x0)
   const v = (z: number) => 1 - (f.yGround + (z / f.topRel) * (f.yTop - f.yGround))
   const out: FacadeQuad[] = []
-  for (const fp of footprints) {
+  for (const { fps, z0, z1 } of layers) for (const fp of fps) {
     for (let i = 0; i < fp.length; i++) {
       const a = fp[i]
       const b = fp[(i + 1) % fp.length]
@@ -212,7 +213,7 @@ export function facadeQuads(f: Facade, footprints: Pt[][], north: number, top: n
       // סדר הפינות משמאל לימין מנקודת מבטו של הצופה
       const [l, rt] = a.x * r.x + a.y * r.y <= b.x * r.x + b.y * r.y ? [a, b] : [b, a]
       const P = (p: Pt, z: number): [number, number, number] => [p.x + nx * offset, z, p.y + ny * offset]
-      out.push({ pos: [P(l, 0), P(rt, 0), P(rt, top), P(l, top)], uv: [[u(l), v(0)], [u(rt), v(0)], [u(rt), v(top)], [u(l), v(top)]] })
+      out.push({ pos: [P(l, z0), P(rt, z0), P(rt, z1), P(l, z1)], uv: [[u(l), v(z0)], [u(rt), v(z0)], [u(rt), v(z1)], [u(l), v(z1)]] })
     }
   }
   return out

@@ -151,6 +151,19 @@ export interface Building {
   source: string
 }
 
+// קומה עליונה שנקראה מתוכנית הקומה שלה. במטרים, כבר מוצבת מעל קומת הקרקע.
+export interface FloorPlan {
+  id: string
+  drawingId: string
+  title: string
+  order: number
+  footprints: Pt[][]
+  openings: { type: 'door' | 'sliding_door' | 'window' | 'opening'; a: Pt; b: Pt }[]
+  area: number
+  how: string
+  readAt: string
+}
+
 export type FacadeSide = 'N' | 'S' | 'E' | 'W'
 
 // שרטוט חזית מההיתר, מולבש על הבית בהיטל ישר. התמונה נשמרת במכשיר לפי id. המיקומים הם חלקים מרוחב ומגובה התמונה.
@@ -356,6 +369,7 @@ export interface Project {
   // שדות שמולאו מקריאת ההיתר: שם השדה ומאיפה חולץ. עריכה ידנית מסירה את הסימון
   extracted?: Partial<Record<'north' | 'levelsNote' | 'plotArea' | 'baseLevel', string>>
   building?: Building
+  floors?: FloorPlan[] // הקומות העליונות, כל אחת מהתוכנית שלה, מהנמוכה לגבוהה
   facades?: Facade[] // חזיתות ההיתר שמולבשות על הבית במודל
   variants: Variant[]
   activeVariantId: string
