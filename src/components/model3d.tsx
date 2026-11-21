@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
 import type { Building, Facade, FacadeSide, Pt, Surface } from '../lib/types'
 import { facadeQuads } from '../lib/facades'
+import type { HouseLayer } from '../lib/floors'
 import { loadDocBlob } from '../lib/idb'
 import { MATERIALS } from '../lib/garden'
 import { bbox } from '../lib/geom'
@@ -278,19 +279,49 @@ export function HouseMat({ sel = false }: { sel?: boolean }) {
 
 // ---------- מסת הקומות העליונות והגג ----------
 
-export function BuildingMass({ footprints, b }: { footprints: Pt[][]; b: Building }) {
-  const eave = b.eaveRel && b.eaveRel > b.groundHeight + 0.3 ? b.eaveRel : b.storeys > 1 ? b.groundHeight * b.storeys : null
-  const ridge = b.ridgeRel && eave && b.ridgeRel > eave + 0.2 ? b.ridgeRel : null
+export function BuildingMass({ footprints, b, layers }: { footprints: Pt[][]; b?: Building; layers: HouseLayer[] }) {
+  const top = layers.length ? layers[layers.length - 1].z1 : null
+  const topFps = layers.length ? layers[layers.length - 1].fps : footprints
+  const ridge = b?.ridgeRel && top && b.ridgeRel > top + 0.2 ? b.ridgeRel : null
+  const pitched = b && (b.roofType === 'gable' || b.roofType === 'mixed' || b.roofType === 'hip')
   return (
     <>
-      {footprints.map((fp, i) => (
+      {/* תקרת קומת הקרקע: כשהקומה שמעל קטנה ממנה, החלק הגלוי הוא גג או מרפסת */}
+      {layers[0]?.fromPlan && footprints.map((fp, i) => <UpperBlock key={`s${i}`} fp={fp} z0={layers[0].z0 - 0.02} z1={layers[0].z0 + 0.12} />)}
+      {layers.map((l, i) => (
         <group key={i}>
-          {eave && <UpperBlock fp={fp} z0={b.groundHeight} z1={eave} />}
-          {eave && ridge && (b.roofType === 'gable' || b.roofType === 'mixed' || b.roofType === 'hip') && <Gable fp={fp} eave={eave} ridge={ridge} />}
-          {eave && (!ridge || b.roofType === 'flat') && <UpperBlock fp={fp} z0={eave} z1={eave + 0.25} color="#a9aca8" roof />}
+          {l.fps.map((fp, j) => (
+            <UpperBlock key={j} fp={fp} z0={l.z0} z1={l.z1} />
+          ))}
+          {l.openings.map((o, j) => (
+            <FloorOpening key={j} o={o} z0={l.z0} h={l.z1 - l.z0} />
+          ))}
         </group>
       ))}
+      {top !== null &&
+        topFps.map((fp, i) => (
+          <group key={`r${i}`}>
+            {ridge && pitched && <Gable fp={fp} eave={top} ridge={ridge} />}
+            {(!ridge || !pitched) && <UpperBlock fp={fp} z0={top} z1={top + 0.25} color="#a9aca8" roof />}
+          </group>
+        ))}
     </>
+  )
+}
+
+// פתח בקומה עליונה, מתוכנית הקומה: חלון בכחול בהיר, דלת בכתום, כמו בקומת הקרקע
+function FloorOpening({ o, z0, h }: { o: HouseLayer['openings'][number]; z0: number; h: number }) {
+  const len = Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y)
+  if (len < 0.3) return null
+  const door = o.type !== 'window'
+  const sill = door ? 0.02 : 0.9
+  const oh = Math.min(h - sill - 0.25, door ? 2.1 : 1.2)
+  if (oh < 0.4) return null
+  return (
+    <mesh position={[(o.a.x + o.b.x) / 2, z0 + sill + oh / 2, (o.a.y + o.b.y) / 2]} rotation={[0, -Math.atan2(o.b.y - o.a.y, o.b.x - o.a.x), 0]}>
+      <boxGeometry args={[len, oh, 0.36]} />
+      <meshStandardMaterial color={door ? '#e0763a' : '#a9c6d3'} transparent opacity={door ? 0.85 : 0.6} roughness={0.3} />
+    </mesh>
   )
 }
 
@@ -439,18 +470,18 @@ export { unitFootprints } from '../lib/structureToElements'
 // ---------- חזיתות ההיתר על הבית ----------
 // שכבה דקה מחוץ לקירות, עם שרטוט החזית בהיטל ישר. התמונה נטענת מהמכשיר. חזית בלי תמונה לא מוצגת.
 
-export function FacadeSkins({ facades, footprints, north, top }: { facades: Facade[]; footprints: Pt[][]; north: number; top: number }) {
+export function FacadeSkins({ facades, layers, north }: { facades: Facade[]; layers: { fps: Pt[][]; z0: number; z1: number }[]; north: number }) {
   const sides = useMemo(() => facades.map((f) => f.side).filter((s): s is FacadeSide => Boolean(s)), [facades])
   return (
     <>
       {facades.map((f) => (
-        <FacadeSkin key={f.id} f={f} footprints={footprints} north={north} top={top} sides={sides} />
+        <FacadeSkin key={f.id} f={f} layers={layers} north={north} sides={sides} />
       ))}
     </>
   )
 }
 
-function FacadeSkin({ f, footprints, north, top, sides }: { f: Facade; footprints: Pt[][]; north: number; top: number; sides: FacadeSide[] }) {
+function FacadeSkin({ f, layers, north, sides }: { f: Facade; layers: { fps: Pt[][]; z0: number; z1: number }[]; north: number; sides: FacadeSide[] }) {
   const invalidate = useThree((s) => s.invalidate)
   const [tex, setTex] = useState<THREE.Texture | null>(null)
   useEffect(() => {
@@ -476,7 +507,7 @@ function FacadeSkin({ f, footprints, north, top, sides }: { f: Facade; footprint
     }
   }, [f.id, invalidate])
   const geom = useMemo(() => {
-    const quads = facadeQuads(f, footprints, north, top, sides)
+    const quads = facadeQuads(f, layers, north, sides)
     if (!quads.length) return null
     const pos: number[] = []
     const uv: number[] = []
@@ -486,7 +517,7 @@ function FacadeSkin({ f, footprints, north, top, sides }: { f: Facade; footprint
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
     g.computeVertexNormals()
     return g
-  }, [f, footprints, north, top, sides])
+  }, [f, layers, north, sides])
   useEffect(() => () => geom?.dispose(), [geom])
   if (!geom || !tex) return null
   return (

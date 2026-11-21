@@ -1,3 +1,5 @@
+import { floorFromStructure, setFloors, upperFloorDrawings } from '../lib/floors'
+import type { FloorPlan } from '../lib/types'
 import { addFacade } from '../lib/facades'
 import { DataTable } from './DataTable'
 import { useEffect, useRef, useState } from 'react'
@@ -130,6 +132,25 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     if (r.errors.length) note(r.errors[0])
   }
 
+  // קומות עליונות: כל תוכנית קומה נקראת בנפרד, והקומה מוצבת מעל הקרקע
+  const doFloors = async (list: Drawing[], ground: Drawing) => {
+    const targets = upperFloorDrawings(list, ground.id).slice(0, 4)
+    if (!targets.length) return
+    const out: FloorPlan[] = []
+    for (const d of targets) {
+      setBusy(`קוראת קומה: ${d.title || 'תוכנית קומה'}`)
+      try {
+        const f = floorFromStructure(latest(), d, await readStructure(doc, d), uid())
+        if (f) out.push(f)
+      } catch (e) {
+        note(`${d.title || 'תוכנית קומה'} לא נקראה: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    if (!out.length) return
+    setFloors(project.id, out)
+    note(`${out.length === 1 ? 'קומה אחת נבנתה' : `${out.length} קומות נבנו`} מהתוכנית שלהן: ${out.map((f) => `${f.title} (${f.area.toFixed(2)} מ"ר, ${f.openings.length} פתחים)`).join(' · ')}`)
+  }
+
   // חזיתות: כל שרטוט חזית נחתך מהגיליון ונשמר להלבשה על הבית במודל
   const doFacades = async (list: Drawing[]) => {
     const targets = list.filter((d) => d.kind === 'elevation').slice(0, 6)
@@ -197,6 +218,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       await doHeights(list)
       await doDims(g)
       buildElements()
+      await doFloors(list, g)
       await doFacades(list)
     }, 'קריאת ההיתר הסתיימה')
 

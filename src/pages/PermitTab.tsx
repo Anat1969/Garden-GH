@@ -1,3 +1,4 @@
+import { FloorsPanel } from '../components/FloorsPanel'
 import { FacadesPanel } from '../components/FacadesPanel'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -429,6 +430,8 @@ export default function PermitTab() {
           </div>
         </>
       )}
+
+      <FloorsPanel project={project} />
 
       <FacadesPanel project={project} />
 
