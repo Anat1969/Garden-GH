@@ -1,6 +1,7 @@
 // בניית הבית מקריאת ההיתר: קנה מידה אוטומטי מהמידות, ובנייה של הקירות, הפתחים, גבול המגרש ואזורי הגינה.
 // כל כישלון מחזיר סיבה ברורה וצעד הבא, במקום מודל ריק בלי הסבר.
-import type { PlanDimension, Pt } from './types'
+import type { PlanDimension, Project, Pt } from './types'
+import { PT_TO_M_AT_1 } from './pdf'
 import { getState, setPlanScale, uid, updateVariant } from './store'
 import { attachLines, inferScale, reliableDimScale } from './dims'
 import { isAutoHouse, replaceAuto, STRUCT_SRC, structureToElements } from './structureToElements'
@@ -63,6 +64,43 @@ export interface BuildResult {
   next?: { to: string; t: string }
 }
 
+// גרסת הקריאה. עולה בכל שינוי מהותי בקריאת ההיתר, כדי שפרויקט שנקרא בגרסה ישנה ייקרא מחדש ולא יציג מודל שגוי.
+export const READ_VERSION = 3
+
+// גודל הבית לפי קנה המידה הנוכחי, במטרים: הצלע הארוכה של המלבן החוסם את כל היחידות
+export function houseSpan(p: Project | undefined): number | null {
+  const s = p?.permit?.structure
+  const mpp = p?.permit?.scale.metersPerPt
+  if (!s || !mpp) return null
+  const pts = s.units.flatMap((u) => u.footprint)
+  if (!pts.length) return null
+  const xs = pts.map((v) => v.x)
+  const ys = pts.map((v) => v.y)
+  return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * mpp
+}
+const PLAUSIBLE = (m: number) => m >= 4 && m <= 70
+
+// שער שפיות לקנה המידה: בית מגורים הוא בין 4 ל-70 מטר. קנה מידה שנותן בית של 400 מטר או של 60 ס"מ שגוי,
+// ומודל שנבנה ממנו נראה שטוח או נעלם. ב-PDF בגודל הנייר האמיתי מנסים את קני המידה המקובלים, ובוחרים את זה שנותן בית סביר.
+export function saneScale(projectId: string): { ok: boolean; how: string } {
+  const p = latest(projectId)
+  const span = houseSpan(p)
+  if (!p?.permit || span === null) return { ok: true, how: '' }
+  if (PLAUSIBLE(span)) return { ok: true, how: '' }
+  const cur = p.permit.scale.metersPerPt!
+  const ptSpan = span / cur
+  if (p.permit.sourceType !== 'image') {
+    for (const den of [100, 50, 200, 250, 125, 500, 25]) {
+      const m = ptSpan * den * PT_TO_M_AT_1
+      if (m >= 6 && m <= 45) {
+        setPlanScale(projectId, { den, metersPerPt: den * PT_TO_M_AT_1, source: 'text' })
+        return { ok: true, how: `קנה המידה שנקרא נתן בית של ${span.toFixed(1)} מ', וזה לא סביר. תוקן ל-1:${den}, שנותן בית של ${m.toFixed(1)} מ'. כדאי לאמת מול מידה כתובה.` }
+      }
+    }
+  }
+  return { ok: false, how: `קנה המידה נותן בית של ${span.toFixed(1)} מ', וזה לא סביר. קובעים קנה מידה במסך המידות לפי מידה ידועה אחת.` }
+}
+
 export function buildHouse(projectId: string): BuildResult {
   const lines: string[] = []
   let p = latest(projectId)
@@ -89,6 +127,10 @@ export function buildHouse(projectId: string): BuildResult {
       }
     p = latest(projectId)!
   }
+  const sane = saneScale(projectId)
+  if (sane.how) lines.push(sane.how)
+  if (!sane.ok) return { ok: false, count: 0, replaced: 0, lines, next: { to: 'dims', t: 'לקביעת קנה מידה' } }
+  p = latest(projectId)!
   const els = structureToElements(p, uid)
   if (!els.some((e) => e.kind === 'wall')) {
     return {

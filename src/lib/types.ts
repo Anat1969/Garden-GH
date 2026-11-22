@@ -205,6 +205,8 @@ export interface Permit {
   planPage: number
   scale: ScaleInfo
   detectedAt?: string
+  readVersion?: number // גרסת הקריאה שבה נקרא ההיתר. קריאה מגרסה ישנה נקראת מחדש
+  mapVersion?: number // גרסת הקריאה שבה מופה הגיליון
   detection?: { walls: number; openings: number }
   cloudPath?: string
   sourceType?: 'pdf' | 'image'
