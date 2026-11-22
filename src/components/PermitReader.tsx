@@ -108,6 +108,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       plotArea: area ? Math.round(area * 100) / 100 : p.plotArea,
       extracted: { ...p.extracted, north: 'מחץ הצפון בתוכנית', ...(area ? { plotArea: 'מגבול המגרש בתוכנית' } : {}) },
     }))
+    if (s.snap?.snapped) note(`קו המתאר הוצמד לקווי הקיר שבשרטוט עצמו: ${s.snap.snapped} מתוך ${s.snap.edges} צלעות. המיקום מדויק כמו בהיתר.`)
     note(`נקראו ${s.units.length} יחידות, ${s.openings.length} פתחים, ${s.zones.length} אזורי גינה, ${s.levels.length} מפלסים, ${s.trees.length} עצים`)
   }
 
