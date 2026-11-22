@@ -1,3 +1,5 @@
+import { READ_VERSION, houseSpan } from '../lib/buildHouse'
+import { aiAvailable } from '../lib/aiRead'
 import { AerialGround } from '../components/AerialGround'
 import { projectFacades } from '../lib/facades'
 import { CLADDING, claddingOf, houseOf, setCladding } from '../lib/floors'
@@ -5,7 +7,7 @@ import type { Cladding } from '../lib/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls as OrbitImpl } from 'three/examples/jsm/controls/OrbitControls.js'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useProject } from './ProjectLayout'
 import type { Element, Fence, Opening, Project, Surface, Wall } from '../lib/types'
 import { MATERIAL_COLOR, MATERIAL_TEXT } from '../lib/types'
@@ -21,7 +23,7 @@ import { baseAbs } from '../lib/structureToElements'
 import { stairPlan } from '../lib/stairs'
 import { LABEL_TEXT } from '../lib/types'
 import { pointInPoly } from '../lib/geom'
-import { Tag } from '../components/ui'
+import { Tag, toast } from '../components/ui'
 import { IconBtn } from '../components/EditIcons'
 import { buildHouse, type BuildResult } from '../lib/buildHouse'
 import { PageIntro } from '../components/PageIntro'
@@ -589,6 +591,20 @@ export default function ModelTab() {
   const selected = variant.elements.find((e) => e.id === selId) ?? null
   const [showDims, setShowDims] = useState(false)
   const [facadesOn, setFacadesOn] = useState(true)
+  // היתר שנקרא בגרסה ישנה של הקריאה: חוזרים למסך ההיתר, והוא נקרא שם מחדש לבד. פעם אחת בכל ביקור.
+  const nav = useNavigate()
+  // פרויקט הדוגמה נבנה מנתונים מוכנים, בלי קובץ היתר, ולכן אין מה לקרוא מחדש
+  const staleRead = Boolean(project.permit?.structure && !project.permit.fileName.includes('לא מצורף') && (project.permit.readVersion ?? 0) < READ_VERSION)
+  useEffect(() => {
+    if (!staleRead || !aiAvailable || localStorage.getItem('garden.autoRead') === '0') return
+    const k = `garden.reread.${project.id}`
+    if (sessionStorage.getItem(k)) return
+    sessionStorage.setItem(k, '1')
+    toast('ההיתר נקרא בגרסה ישנה. קוראת אותו מחדש, והמודל יוצג בסיום.')
+    nav('../permit')
+  }, [staleRead, project.id, nav])
+  const span = houseSpan(project)
+  const badScale = span !== null && (span < 4 || span > 70)
   const [sectionOn, setSectionOn] = useState(false)
   const [aerialOn, setAerialOn] = useState(true)
   const [sectionAt, setSectionAt] = useState(0.5)
@@ -753,6 +769,20 @@ export default function ModelTab() {
         </div>
       </div>
       <aside className="side">
+        {(staleRead || badScale) && (
+          <div className="notice danger" style={{ marginBottom: 10 }} data-testid="model-stale">
+            {badScale ? (
+              <>
+                <b>המודל לא נראה נכון:</b> לפי קנה המידה הבית באורך {span!.toFixed(1)} מ', וזה לא סביר.
+              </>
+            ) : (
+              <>
+                <b>ההיתר נקרא בגרסה ישנה של הקריאה</b>, בלי קומות ובלי חזיתות.
+              </>
+            )}{' '}
+            <Link to="../permit">קריאה מחדש של ההיתר</Link>
+          </div>
+        )}
         {(project.floors?.length ?? 0) > 0 && (
           <div className="notice info" style={{ marginBottom: 10, fontSize: 13 }} data-testid="floors-note">
             <b>עובדה:</b> {project.floors!.length === 1 ? 'מפלס אחד נבנה' : `${project.floors!.length} מפלסים נבנו`} מתוכנית הקומה: קו מתאר ופתחים. המרתף נראה ב"חתך במודל".

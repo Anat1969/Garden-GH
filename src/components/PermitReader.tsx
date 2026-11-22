@@ -1,3 +1,5 @@
+import { READ_VERSION } from '../lib/buildHouse'
+import { deleteDocBlob } from '../lib/idb'
 import { STOREY_TEXT, floorFromStructure, setFloors, storeyDrawings } from '../lib/floors'
 import type { FloorPlan } from '../lib/types'
 import { addFacade, sideFromTitle } from '../lib/facades'
@@ -89,7 +91,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       all.push(...r.drawings)
       if (r.errors.length) note(`עמוד ${pg.index}: ${r.errors[0]}`)
     }
-    setPermit((p) => ({ ...p, drawings: all }))
+    setPermit((p) => ({ ...p, drawings: all, mapVersion: READ_VERSION }))
     note(`מופו ${all.length} שרטוטים`)
     return all
   }
@@ -242,23 +244,44 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
   const fullRead = () =>
     run(async () => {
       setLog([])
-      const list = drawings.length ? drawings : await doMap()
-      const g = (work && list.find((d) => d.id === work.id)) ?? pickGardenDrawing(list)
+      // קריאה מלאה מתחילה מדף נקי: מה שנקרא בגרסה ישנה (מיפוי, מבנה, קנה מידה שלא נקבע ביד, קומות וחזיתות) נמחק ולא מתערבב בחדש
+      const stale = (permit.readVersion ?? 0) < READ_VERSION && Boolean(permit.structure)
+      if (stale) note('ההיתר נקרא בעבר בגרסה ישנה של הקריאה. קוראת מחדש מההתחלה.')
+      const oldFacades = latest().facades ?? []
+      updateProject(project.id, (p) => ({
+        ...p,
+        floors: [],
+        facades: [],
+        building: stale ? undefined : p.building,
+        permit: p.permit && {
+          ...p.permit,
+          structure: undefined,
+          ...(stale ? { drawings: [], dims: [], dimScales: [], region: undefined, workDrawingId: undefined, scale: { den: null, metersPerPt: null, source: null } } : {}),
+        },
+      }))
+      await Promise.all(oldFacades.map((f) => deleteDocBlob(f.id).catch(() => undefined)))
+      const cur = latest().permit!
+      const list = cur.drawings?.length && cur.mapVersion === READ_VERSION ? cur.drawings : await doMap()
+      const g = (!stale && work && list.find((d) => d.id === work.id)) || pickGardenDrawing(list)
       if (!g) throw new Error('לא נמצאה תוכנית קומת קרקע או פיתוח שטח. אפשר לבחור שרטוט ידנית.')
       useDrawing(g)
       note(`שרטוט העבודה: ${g.title || DRAWING_KIND_TEXT[g.kind]}`)
       await doStructure(g)
       // מפלסים, מידות וקומות נקראים במקביל: שלושתם תלויים רק בתוכנית הקרקע
       await Promise.all([doHeights(list), doDims(g), doFloors(list, g)])
-      buildElements()
+      const built = buildElements()
+      // בלי בית סביר אין מודל: עוצרים עם הסבר, ולא מציגים מודל שטוח
+      if (!built) throw new Error(logRef.current[logRef.current.length - 1] || 'הבית לא נבנה מההיתר.')
       guessNorth(list)
       await doFacades(list)
+      setPermit((p) => ({ ...p, readVersion: READ_VERSION }))
     }, 'קריאת ההיתר הסתיימה')
 
   // קריאה אוטומטית: היתר שהועלה ועוד לא נקרא נקרא לבד, ובסיום עוברים למודל. פעם אחת לכל קובץ.
   const autoKey = `garden.autoRead.${project.id}.${permit.fileName}`
   useEffect(() => {
-    if (!aiAvailable || permit.structure || localStorage.getItem('garden.autoRead') === '0' || sessionStorage.getItem(autoKey)) return
+    const fresh = permit.structure && (permit.readVersion ?? 0) >= READ_VERSION
+    if (!aiAvailable || fresh || localStorage.getItem('garden.autoRead') === '0' || sessionStorage.getItem(autoKey)) return
     sessionStorage.setItem(autoKey, '1')
     void fullRead().then(() => {
       if (latest().permit?.structure && activeHasHouse()) {

@@ -61,3 +61,46 @@ test('מעלים היתר ורואים את הבית בתלת-ממד בתוך ה
   await page.getByTestId('model-canvas').screenshot({ path: 'shots/56-auto-model.png' })
   expect(errors).toEqual([])
 })
+
+// התקלה שענת ראתה: פרויקט שנקרא בגרסה ישנה, עם קנה מידה שגוי, הציג מודל שטוח. עכשיו הוא נקרא מחדש לבד.
+test('פרויקט שנקרא בגרסה ישנה עם קנה מידה שגוי נקרא מחדש לבד, והבית בגודל סביר', async ({ page }) => {
+  await mock(page)
+  await page.setViewportSize({ width: 1366, height: 900 })
+  await page.goto('/projects')
+  await page.getByPlaceholder('למשל: גינת משפחת לוי').fill('פרויקט ישן')
+  await page.getByPlaceholder('רחוב, מספר, עיר').fill('הרצל 15, רחובות')
+  await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
+  await page.getByRole('button', { name: 'היתר לדוגמה' }).click()
+  await page.waitForURL(/\/model$/, { timeout: 60000 })
+  const span = () =>
+    page.evaluate(() => {
+      const ps = JSON.parse(Object.values(localStorage).find((v) => v.includes('פרויקט ישן')) || '[]')
+      const p = ps.find((x: { name: string }) => x.name === 'פרויקט ישן')
+      const w = (p.variants[0].elements as { kind: string; scope?: string; x1: number; x2: number }[]).filter((e) => e.kind === 'wall' && e.scope === 'house')
+      const xs = w.flatMap((e) => [e.x1, e.x2])
+      return { m: Math.max(...xs) - Math.min(...xs), v: p.permit.readVersion }
+    })
+  const ok = await span()
+  expect(ok.m).toBeGreaterThan(5)
+  expect(ok.m).toBeLessThan(40)
+  // מקלקלים את הפרויקט כמו בגרסה הישנה: בלי גרסת קריאה, וקנה מידה גדול פי 30
+  await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => (localStorage.getItem(k) || '').includes('פרויקט ישן'))!
+    const ps = JSON.parse(localStorage.getItem(key)!)
+    const p = ps.find((x: { name: string }) => x.name === 'פרויקט ישן')
+    delete p.permit.readVersion
+    p.permit.scale = { den: null, metersPerPt: p.permit.scale.metersPerPt * 30, source: 'calibrated' }
+    for (const e of p.variants[0].elements) for (const k of ['x1', 'y1', 'x2', 'y2', 'x', 'y', 'w', 'd']) if (typeof e[k] === 'number') e[k] *= 30
+    localStorage.setItem(key, JSON.stringify(ps))
+    sessionStorage.clear()
+  })
+  await page.reload()
+  // המודל מזהה קריאה ישנה, חוזר להיתר, קורא מחדש וחוזר למודל
+  await page.waitForURL(/\/permit$/, { timeout: 30000 })
+  await page.waitForURL(/\/model$/, { timeout: 60000 })
+  const fixed = await span()
+  expect(fixed.m).toBeGreaterThan(5)
+  expect(fixed.m).toBeLessThan(40)
+  expect(fixed.v).toBeGreaterThanOrEqual(3)
+  await expect(page.getByTestId('model-stale')).toHaveCount(0)
+})
