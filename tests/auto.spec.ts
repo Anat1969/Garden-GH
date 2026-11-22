@@ -101,6 +101,6 @@ test('פרויקט שנקרא בגרסה ישנה עם קנה מידה שגוי 
   const fixed = await span()
   expect(fixed.m).toBeGreaterThan(5)
   expect(fixed.m).toBeLessThan(40)
-  expect(fixed.v).toBeGreaterThanOrEqual(4)
+  expect(fixed.v).toBeGreaterThanOrEqual(5)
   await expect(page.getByTestId('model-stale')).toHaveCount(0)
 })

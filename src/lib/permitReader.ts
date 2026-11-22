@@ -246,6 +246,7 @@ export async function readStructure(doc: PDFDocumentProxy, d: Drawing): Promise<
   let openings = (r.openings ?? []).map((o) => ({ type: o.type, a: P(o.x1, o.y1), b: P(o.x2, o.y2) }))
   // היתר וקטורי: קו המתאר מוצמד לקווי הקיר שבשרטוט עצמו. הבינה נתנה מיקום בקירוב, והקו הווקטורי נותן את המיקום המדויק.
   let snap: PlanStructure['snap']
+  let plotSnapped: Pt[] | null = null
   try {
     const segs = segsIn(await pageSegments(doc, d.page), d.box)
     if (segs.length > 400) {
@@ -264,6 +265,15 @@ export async function readStructure(doc: PDFDocumentProxy, d: Drawing): Promise<
         openings = openings.map((o) => ({ ...o, ...snapOpening(o.a, o.b, polys, 0.6 * ptPerM) }))
       }
       snap = { snapped: hit, edges: all, raw }
+      // גבול המגרש: קו בודד, לפעמים מקווקו. מצמידים לקו הקרוב שמכסה לפחות 40% מהצלע.
+      const plot0 = poly(r.plot)
+      if (plot0.length >= 3) {
+        const ps = snapPolygon(plot0, segs, 1.0 * ptPerM, 0.12 * ptPerM, 0.5 * ptPerM, false, 0.4)
+        if (ps.snapped) {
+          plotSnapped = ps.poly
+          snap = { ...snap, plotSnapped: ps.snapped, plotEdges: ps.edges, plotRaw: plot0 }
+        }
+      }
     }
   } catch {
     // בלי קווים וקטוריים נשארים עם הקריאה החזותית
@@ -274,7 +284,7 @@ export async function readStructure(doc: PDFDocumentProxy, d: Drawing): Promise<
     units,
     openings,
     snap,
-    plot: poly(r.plot),
+    plot: plotSnapped ?? poly(r.plot),
     zones: (r.zones ?? [])
       .map((z) => {
         // מדרגות ורמפה: המפלס העליון, התחתון וכיוון הירידה (בתמונה: למעלה = צפון בתוכנית, y כלפי מטה)

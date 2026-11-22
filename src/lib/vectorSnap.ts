@@ -46,7 +46,8 @@ export interface SnapResult {
 }
 
 // tol: כמה רחוק מהקו של הבינה מחפשים, ביחידות העמוד. wallMin, wallMax: עובי קיר סביר, ביחידות העמוד.
-export function snapPolygon(poly: Pt[], segs: Seg[], tol: number, wallMin: number, wallMax: number): SnapResult {
+// twin: לדרוש בן זוג פנימי (קיר). בלי twin מצמידים לקו בודד, כמו גבול מגרש: שם נבחר הקו הקרוב שמכסה מספיק מהצלע.
+export function snapPolygon(poly: Pt[], segs: Seg[], tol: number, wallMin: number, wallMax: number, twin = true, minCover = 0.5): SnapResult {
   const n = poly.length
   if (n < 3) return { poly, snapped: 0, edges: n }
   const bin = Math.max(0.25, wallMin / 6)
@@ -91,10 +92,10 @@ export function snapPolygon(poly: Pt[], segs: Seg[], tol: number, wallMin: numbe
     let pick: number | null = null
     for (const k of [...cov.keys()].sort((p, q) => Math.abs(p) - Math.abs(q))) {
       const c = at(k)
-      if (c < L * 0.5) continue
-      let twin = false
-      for (let t = Math.round(wallMin / bin); t <= Math.round(wallMax / bin) && !twin; t++) if (at(k - t) >= c * 0.5) twin = true
-      if (twin) {
+      if (c < L * minCover) continue
+      let ok = !twin
+      for (let t = Math.round(wallMin / bin); t <= Math.round(wallMax / bin) && !ok; t++) if (at(k - t) >= c * 0.5) ok = true
+      if (ok) {
         pick = k
         break
       }
