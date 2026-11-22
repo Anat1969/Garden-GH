@@ -65,7 +65,7 @@ export interface BuildResult {
 }
 
 // גרסת הקריאה. עולה בכל שינוי מהותי בקריאת ההיתר, כדי שפרויקט שנקרא בגרסה ישנה ייקרא מחדש ולא יציג מודל שגוי.
-export const READ_VERSION = 3
+export const READ_VERSION = 4
 
 // גודל הבית לפי קנה המידה הנוכחי, במטרים: הצלע הארוכה של המלבן החוסם את כל היחידות
 export function houseSpan(p: Project | undefined): number | null {

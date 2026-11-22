@@ -1,3 +1,5 @@
+import { pageSegments, segsIn, snapOpening, snapPolygon } from './vectorSnap'
+import { PT_TO_M_AT_1 } from './pdf'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { Box, Building, BuildingLevel, Drawing, DrawingKind, PlanStructure, Pt } from './types'
 
@@ -232,19 +234,46 @@ export async function readStructure(doc: PDFDocumentProxy, d: Drawing): Promise<
   const r = await callTask<StructureRaw>('structure', canvas, d.title ? `Drawing title: ${d.title}` : '')
   const P = (x: number, y: number): Pt => ({ x: d.box.x + x / scale, y: d.box.y + y / scale })
   const poly = (ps: Pt[]) => (ps ?? []).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)).map((p) => P(p.x, p.y))
+  let units = (r.units ?? [])
+    .map((u) => ({
+      name: u.name,
+      footprint: poly(u.footprint),
+      wallCm: u.wall_thickness_cm > 5 && u.wall_thickness_cm < 80 ? u.wall_thickness_cm : 25,
+      levelRel: u.floor_level_rel || 0,
+      levelAbs: u.floor_level_abs > 100 ? u.floor_level_abs : null,
+    }))
+    .filter((u) => u.footprint.length >= 3)
+  let openings = (r.openings ?? []).map((o) => ({ type: o.type, a: P(o.x1, o.y1), b: P(o.x2, o.y2) }))
+  // היתר וקטורי: קו המתאר מוצמד לקווי הקיר שבשרטוט עצמו. הבינה נתנה מיקום בקירוב, והקו הווקטורי נותן את המיקום המדויק.
+  let snap: PlanStructure['snap']
+  try {
+    const segs = segsIn(await pageSegments(doc, d.page), d.box)
+    if (segs.length > 400) {
+      const ptPerM = 1 / ((d.scaleDen || 100) * PT_TO_M_AT_1)
+      let hit = 0
+      let all = 0
+      const raw = units.map((u) => u.footprint)
+      units = units.map((u) => {
+        const s = snapPolygon(u.footprint, segs, 0.55 * ptPerM, 0.12 * ptPerM, 0.5 * ptPerM)
+        hit += s.snapped
+        all += s.edges
+        return { ...u, footprint: s.poly }
+      })
+      if (hit) {
+        const polys = units.map((u) => u.footprint)
+        openings = openings.map((o) => ({ ...o, ...snapOpening(o.a, o.b, polys, 0.6 * ptPerM) }))
+      }
+      snap = { snapped: hit, edges: all, raw }
+    }
+  } catch {
+    // בלי קווים וקטוריים נשארים עם הקריאה החזותית
+  }
   return {
     drawingId: d.id,
     northDeg: Number.isFinite(r.north_angle_deg) ? r.north_angle_deg : 0,
-    units: (r.units ?? [])
-      .map((u) => ({
-        name: u.name,
-        footprint: poly(u.footprint),
-        wallCm: u.wall_thickness_cm > 5 && u.wall_thickness_cm < 80 ? u.wall_thickness_cm : 25,
-        levelRel: u.floor_level_rel || 0,
-        levelAbs: u.floor_level_abs > 100 ? u.floor_level_abs : null,
-      }))
-      .filter((u) => u.footprint.length >= 3),
-    openings: (r.openings ?? []).map((o) => ({ type: o.type, a: P(o.x1, o.y1), b: P(o.x2, o.y2) })),
+    units,
+    openings,
+    snap,
     plot: poly(r.plot),
     zones: (r.zones ?? [])
       .map((z) => {
