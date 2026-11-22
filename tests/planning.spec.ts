@@ -11,8 +11,8 @@ test('תכנון: שלבים עקביים, מפות אקלים בתוכנית, �
   await page.goto('/projects')
   await page.locator('.grid-cards .card').filter({ hasText: 'הבית של שני' }).getByRole('link', { name: 'פתיחה' }).click()
 
-  // שישה שלבים כמו בדף הבית, והגליון אחרי שלבים ותקציב
-  await expect(page.locator('.stage-group')).toHaveCount(6)
+  // ארבעה שלבים, והגליון אחרי שלבים ותקציב
+  await expect(page.locator('.stage-group')).toHaveCount(4)
   const tabs = await page.locator('.stage-tabs .tab').allTextContents()
   expect(tabs.findIndex((t) => t.includes('גליון להדפסה'))).toBe(tabs.findIndex((t) => t.includes('שלבים ותקציב')) + 1)
 

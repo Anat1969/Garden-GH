@@ -123,8 +123,11 @@ export function MapLocator({ project }: { project: Project }) {
   const searched = useRef<string | null>(loc ? project.address : null)
   useEffect(() => {
     const addr = project.address?.trim()
-    if (!addr || searched.current === addr) return
+    // בבדיקות החיפוש האוטומטי כבוי (garden.autoRead), כדי שלא יפנו לשירות האמיתי
+    if (!addr || searched.current === addr || localStorage.getItem('garden.autoRead') === '0') return
     if (loc && loc.source !== 'address') return
+    // החיפוש לכתובת הזו כבר רץ ברקע עם פתיחת הפרויקט (AutoLocate): לא מחפשים פעמיים
+    if (!loc && sessionStorage.getItem(`garden.autoLocate.${project.id}.${addr}`)) return
     searched.current = addr
     setQ(addr)
     void search(addr, true)

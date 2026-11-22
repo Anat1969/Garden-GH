@@ -64,25 +64,40 @@ export async function findPanels(doc: PDFDocumentProxy, pageNo: number): Promise
   const horizontal = W >= H
   const n = horizontal ? cw : ch
   const m = horizontal ? ch : cw
+  // קו מסגרת הוא קו רציף: סופרים רק ריצות כהות ארוכות (מעל 12% מהגובה). כך קווי מידה וקירות בחתכים לא נחשבים.
   const dark = new Float32Array(n)
   for (let i = 0; i < n; i++) {
-    let c = 0
-    for (let j = 0; j < m; j++) {
+    let sum = 0
+    let longest = 0
+    let run = 0
+    let gap = 0
+    for (let j = 0; j <= m; j++) {
       const k = horizontal ? (j * cw + i) * 4 : (i * cw + j) * 4
-      if (data[k] * 0.3 + data[k + 1] * 0.59 + data[k + 2] * 0.11 < 140) c++
+      // קו מסגרת דק יוצא אפור בהיר בהקטנה, ולכן הסף גבוה. רווח של פיקסל אחד לא שובר ריצה
+      const d = j < m && data[k] * 0.3 + data[k + 1] * 0.59 + data[k + 2] * 0.11 < 225
+      if (d) {
+        run += 1 + gap
+        gap = 0
+      } else if (run && ++gap > 1) {
+        if (run >= m * 0.12) sum += run
+        if (run > longest) longest = run
+        run = 0
+        gap = 0
+      }
     }
-    dark[i] = c / m
+    // קו מסגרת: רוב הגובה בריצות ארוכות (טור של מסגרות), או ריצה אחת של כמעט חצי גובה (מסגרת של תוכנית בודדת)
+    dark[i] = sum / m > 0.6 || longest / m > 0.42 ? 1 : 0
   }
   const cuts: number[] = []
   for (let i = 0; i < n; i++) {
-    if (dark[i] > 0.5 && (cuts.length === 0 || i - cuts[cuts.length - 1] > m * 0.3)) cuts.push(i)
+    if (dark[i] > 0.5 && (cuts.length === 0 || i - cuts[cuts.length - 1] > 3)) cuts.push(i)
   }
   const edges = [0, ...cuts, n]
   const panels: Box[] = []
   for (let i = 0; i < edges.length - 1; i++) {
     const a = edges[i]
     const b = edges[i + 1]
-    if (b - a < m * 0.25) continue
+    if (b - a < m * 0.05) continue // רווח בין שתי מסגרות
     // פנל רחב מדי מפוצל לחתיכות חופפות
     const parts = Math.max(1, Math.ceil((b - a) / (m * 2.2)))
     const step = (b - a) / parts
@@ -93,6 +108,34 @@ export async function findPanels(doc: PDFDocumentProxy, pageNo: number): Promise
     }
   }
   return panels.length ? panels : [{ x: 0, y: 0, w: W, h: H }]
+}
+
+// תאי המסגרת בתוך פנל: הפנל מחולק בקווים שחוצים אותו מצד לצד. כל שרטוט יושב בתא משלו.
+// התא הוא העוגן להצבת הקומות: תוכניות הקומות משורטטות בתאים זהים, ולכן מיקום בתוך התא הוא מיקום במגרש.
+export function cellsOf(canvas: HTMLCanvasElement, panel: Box, scale: number, horizontalSheet: boolean): Box[] {
+  const cw = canvas.width
+  const ch = canvas.height
+  const data = canvas.getContext('2d')!.getImageData(0, 0, cw, ch).data
+  const n = horizontalSheet ? ch : cw
+  const m = horizontalSheet ? cw : ch
+  const cuts: number[] = []
+  for (let i = 0; i < n; i++) {
+    let c = 0
+    for (let j = 0; j < m; j++) {
+      const k = horizontalSheet ? (i * cw + j) * 4 : (j * cw + i) * 4
+      if (data[k] * 0.3 + data[k + 1] * 0.59 + data[k + 2] * 0.11 < 225) c++
+    }
+    if (c / m > 0.9 && (cuts.length === 0 || i - cuts[cuts.length - 1] > 6)) cuts.push(i)
+  }
+  const edges = [0, ...cuts, n]
+  const out: Box[] = []
+  for (let i = 0; i < edges.length - 1; i++) {
+    const a = edges[i]
+    const b = edges[i + 1]
+    if (b - a < n * 0.08) continue
+    out.push(horizontalSheet ? { x: panel.x, y: panel.y + a / scale, w: panel.w, h: (b - a) / scale } : { x: panel.x + a / scale, y: panel.y, w: (b - a) / scale, h: panel.h })
+  }
+  return out
 }
 
 interface MapItem {
@@ -119,6 +162,7 @@ export async function mapPage(
     for (let p = queue.shift(); p; p = queue.shift()) {
       try {
         const { canvas, scale } = await renderRegion(doc, pageNo, p, 2400)
+        const cells = panels.length > 1 ? cellsOf(canvas, p, scale, p.h >= p.w) : []
         const r = await callTask<{ drawings: MapItem[] }>('map', canvas)
         for (const d of r.drawings ?? []) {
           const x0 = Math.min(d.box.x0, d.box.x1)
@@ -134,6 +178,8 @@ export async function mapPage(
             title: d.title,
             floor: d.floor,
             scaleDen: d.scale_den > 0 ? d.scale_den : null,
+            // העוגן: הפינה השמאלית העליונה של המסגרת שבה השרטוט יושב. קו המסגרת העליון הוא הקו החוצה הקרוב ביותר מעל ראש השרטוט
+            anchor: cells.length ? { x: p.x, y: Math.max(...cells.map((c) => c.y).filter((cy) => cy <= p.y + (y0 + h * 0.12) / scale), p.y) } : undefined,
           })
         }
       } catch (e) {
@@ -143,7 +189,7 @@ export async function mapPage(
       onStep(`ממפה את עמוד ${pageNo}: ${done} מתוך ${panels.length} חלקים`)
     }
   }
-  await Promise.all([worker(), worker(), worker()])
+  await Promise.all([worker(), worker(), worker(), worker(), worker()])
   return { drawings: dedupeDrawings(found), errors: [...new Set(errors)] }
 }
 

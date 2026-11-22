@@ -74,7 +74,8 @@ test('זרימה: כתובת אחת לפרויקט, שדות שחולצו, רמ�
 
   // מעבר בין שלבים בתחתית
   await page.getByRole('link', { name: 'מעבר לשלב הבא' }).click()
-  await expect(page).toHaveURL(/\/bom$/)
+  // אחרי המודל: תנאי המקום
+  await expect(page).toHaveURL(/\/brief$/)
 
   // מילון מונחים
   await page.goto('/guide#glossary')

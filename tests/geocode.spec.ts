@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test'
 
+// החיפוש האוטומטי כבוי בשאר הבדיקות (playwright.config.ts). כאן הוא הנבדק.
+test.use({ storageState: { cookies: [], origins: [] } })
+
 // כתובת שהוזנה בפרויקט נמצאת לבד על המפה. כשמספר הבית חסר במפה נמצא הרחוב ביישוב הנכון, והאפליקציה אומרת זאת.
 test('כתובת הפרויקט מחופשת לבד: רחוב ביישוב הנכון, לא בית בעיר שכנה', async ({ page }) => {
   const errors: string[] = []

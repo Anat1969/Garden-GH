@@ -25,12 +25,15 @@ export const STOREY_TEXT: Record<StoreyKind, string> = { basement: 'מרתף', f
 // כל התוכניות שמהן נבנה הבית חוץ מקומת הקרקע: מרתף, קומות עליונות וגג. מהנמוכה לגבוהה.
 export function storeyDrawings(list: Drawing[], groundId?: string): { d: Drawing; kind: StoreyKind }[] {
   const out: { d: Drawing; kind: StoreyKind; o: number }[] = []
+  const g = list.find((d) => d.id === groundId)
   list.forEach((d, i) => {
     if (d.id === groundId) return
+    // תוכנית קומה אמיתית משורטטת בגודל של תוכנית הקרקע. תרשים חישוב שטחים קטן ממנה בהרבה, ואינו קומה.
+    if (g && (d.box.w * d.box.h < g.box.w * g.box.h * 0.45 || d.box.w < g.box.w * 0.6 || d.box.h < g.box.h * 0.6)) return
     const t = d.floor + ' ' + d.title
-    if (d.kind === 'basement_plan' || (d.kind === 'floor_plan' && /מרתף|basement|מסד/i.test(t))) out.push({ d, kind: 'basement', o: -1 + i * 0.001 })
+    if (d.kind === 'basement_plan' || (d.kind === 'floor_plan' && /מרתף|basement|מסד|חני/i.test(t))) out.push({ d, kind: 'basement', o: -1 + i * 0.001 })
     else if (d.kind === 'roof_plan' || (d.kind === 'floor_plan' && /תכנית\s*(ה)?גג|roof plan/i.test(t))) out.push({ d, kind: 'roof', o: 20 + i * 0.001 })
-    else if (d.kind === 'floor_plan' && !/קרקע|ground/i.test(t)) out.push({ d, kind: 'floor', o: floorOrder(d) || 5 + i * 0.01 })
+    else if (d.kind === 'floor_plan' && !/קרקע|ground/i.test(t) && !(g && d.title && d.title === g.title)) out.push({ d, kind: 'floor', o: floorOrder(d) || 5 + i * 0.01 })
   })
   return out.sort((a, b) => a.o - b.o).map(({ d, kind }) => ({ d, kind }))
 }
@@ -81,7 +84,19 @@ export function floorFromStructure(p: Project, d: Drawing, s: PlanStructure, id:
   const M = (v: Pt): Pt => ({ x: v.x * mpp, y: v.y * mpp })
   const raw = s.units.map((u) => simplify(u.footprint.map(M), 0.05)).filter((f) => f.length >= 3)
   if (!raw.length) return null
-  const t = alignToGround(raw, ground)
+  // הצבה לפי המסגרת: תוכניות הקומות משורטטות במסגרות זהות, ולכן אותה נקודה במסגרת היא אותה נקודה במגרש.
+  // זו ההצבה המדויקת. כשאין מסגרות, או שהתוצאה לא יושבת על הבית, נופלים לחיפוש החפיפה הטובה ביותר.
+  const gd = p.permit?.drawings?.find((x) => x.id === p.permit?.structure?.drawingId)
+  let t = alignToGround(raw, ground)
+  let byFrame = false
+  if (gd?.anchor && d.anchor) {
+    const gm = sc.metersPerPt
+    const dx = gd.anchor.x * gm - d.anchor.x * mpp
+    const dy = gd.anchor.y * gm - d.anchor.y * mpp
+    const area0 = raw.reduce((a, f) => a + polyArea(f), 0) || 1
+    const share = overlap(raw.map((f) => f.map((v) => ({ x: v.x + dx, y: v.y + dy }))), ground) / area0
+    if (share > 0.45 || kind === 'basement') (t = { dx, dy, share }), (byFrame = true)
+  }
   const T = (v: Pt): Pt => ({ x: Math.round((v.x + t.dx) * 100) / 100, y: Math.round((v.y + t.dy) * 100) / 100 })
   const area = raw.reduce((a, f) => a + polyArea(f), 0)
   return {
@@ -93,7 +108,7 @@ export function floorFromStructure(p: Project, d: Drawing, s: PlanStructure, id:
     footprints: raw.map((f) => f.map(T)),
     openings: s.openings.map((o) => ({ type: o.type, a: T(M(o.a)), b: T(M(o.b)) })),
     area: Math.round(area * 100) / 100,
-    how: t.share > 0.6 ? `הוצבה מעל הקרקע לפי החפיפה הטובה ביותר (${Math.round(t.share * 100)}% מהקומה מעל הבית)` : 'החפיפה לקרקע חלשה: כדאי לבדוק את ההצבה במודל',
+    how: byFrame ? `הוצבה לפי מסגרת השרטוט, כמו בגיליון (${Math.round(t.share * 100)}% מעל הבית)` : t.share > 0.6 ? `הוצבה מעל הקרקע לפי החפיפה הטובה ביותר (${Math.round(t.share * 100)}% מהקומה מעל הבית)` : 'החפיפה לקרקע חלשה: כדאי לבדוק את ההצבה במודל',
     readAt: new Date().toISOString(),
   }
 }
@@ -190,6 +205,8 @@ export function houseOf(p: Project, ground: Pt[][]): House {
   if (n > 0 && top < gh + n * 2.2) top = gh + n * 3
   const uppers: HouseLayer[] = []
   if (n > 0) {
+    // מפלס כל קומה מהחתכים, כשנקרא: קומה א' ואחריה קומה ב' או עליית הגג
+    const marks = [levelOf(b, 'second_floor') ?? levelOf(b, 'attic')].filter((v): v is number => typeof v === 'number' && v > gh + 2 && v < top - 0.5)
     const fixed = floors.reduce((a, f) => a + (f.height ?? 0), 0)
     const free = n - floors.filter((f) => f.height).length
     const h = free > 0 ? Math.max(2.2, (top - gh - fixed) / free) : 0
@@ -197,7 +214,7 @@ export function houseOf(p: Project, ground: Pt[][]): House {
     for (let i = 0; i < n; i++) {
       const f = floors[Math.min(i, floors.length - 1)]
       const own = i < floors.length
-      const fh = (own && f?.height) || h || 3
+      const fh = (own && f?.height) || (n === 2 && marks.length ? (i === 0 ? marks[0] - gh : top - marks[0]) : 0) || h || 3
       uppers.push({ fps: f ? f.footprints : ground, z0: z, z1: z + fh, openings: own && f ? f.openings : [], fromPlan: Boolean(own && f), title: f?.title ?? '', kind: 'floor' })
       z += fh
     }

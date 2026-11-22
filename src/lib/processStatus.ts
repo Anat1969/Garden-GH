@@ -20,7 +20,9 @@ export function processStatus(p: Project, v: Variant): StatusItem[] {
   const els = v.elements
   const req = v.requirements
   const S: StatusItem[] = []
-  const add = (stage: number, t: string, state: StepState, note: string, to = '') => S.push({ stage, t, state, note, to })
+  // ששת השלבים הישנים ממופים לארבעת השלבים: הבית בסביבה שלו, תנאי המקום, תכנון הגינה, כמויות והגשה
+  const NEW: Record<number, number> = { 1: 1, 2: 3, 3: 3, 4: 1, 5: 4, 6: 4 }
+  const add = (stage: number, t: string, state: StepState, note: string, to = '') => S.push({ stage: to === 'brief' ? 2 : (NEW[stage] ?? stage), t, state, note, to })
 
   add(1, 'כתובת', p.address.trim() ? 'ok' : 'missing', p.address.trim() || 'שדה חובה')
   add(1, 'מיקום על המפה', p.location ? 'ok' : 'missing', p.location ? (p.location.source === 'pin' ? 'לפי דקירה' : p.location.source === 'address' ? 'לפי כתובת' : 'לפי קואורדינטות') : 'בלי מיקום אין נתוני אקלים מדויקים')
