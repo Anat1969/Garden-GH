@@ -863,3 +863,5 @@ button.rule.on { background: var(--accent-soft); border-inline-start-color: var(
 .facade-row { display: flex; gap: 10px; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; }
 .facade-row label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; flex: 1 1 160px; }
 .floor-svg { width: 100%; max-height: 260px; background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12); }
+.tool-select { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: rgba(255,255,255,0.92); border-radius: 10px; padding: 3px 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.tool-select select { font: inherit; border: 0; background: transparent; min-height: 28px; }

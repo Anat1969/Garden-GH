@@ -151,11 +151,16 @@ export interface Building {
   source: string
 }
 
-// קומה עליונה שנקראה מתוכנית הקומה שלה. במטרים, כבר מוצבת מעל קומת הקרקע.
+export type StoreyKind = 'basement' | 'floor' | 'roof'
+export type Cladding = 'none' | 'plaster' | 'stone' | 'concrete' | 'wood' | 'dark'
+
+// קומה, מרתף או גג שנקראו מהתוכנית שלהם. במטרים, כבר מוצבת מעל קומת הקרקע.
 export interface FloorPlan {
   id: string
   drawingId: string
   title: string
+  kind?: StoreyKind // ברירת מחדל: קומה עליונה
+  height?: number // גובה הקומה במטרים, כשתוקן ידנית
   order: number
   footprints: Pt[][]
   openings: { type: 'door' | 'sliding_door' | 'window' | 'opening'; a: Pt; b: Pt }[]
@@ -369,6 +374,7 @@ export interface Project {
   // שדות שמולאו מקריאת ההיתר: שם השדה ומאיפה חולץ. עריכה ידנית מסירה את הסימון
   extracted?: Partial<Record<'north' | 'levelsNote' | 'plotArea' | 'baseLevel', string>>
   building?: Building
+  cladding?: Cladding // חיפוי הבית במודל
   floors?: FloorPlan[] // הקומות העליונות, כל אחת מהתוכנית שלה, מהנמוכה לגבוהה
   facades?: Facade[] // חזיתות ההיתר שמולבשות על הבית במודל
   variants: Variant[]
