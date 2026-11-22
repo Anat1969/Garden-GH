@@ -1,5 +1,6 @@
 // תמונות ממבטים: מפיקים תמונה מכל מבט במודל, הופכים אותה לצילום ריאליסטי ב-ChatGPT עם הנחיה מוכנה,
 // ושומרים את התמונה שנוצרה ליד המבט (לפני ואחרי). התמונות נשמרות במכשיר (IndexedDB), לכל חלופה בנפרד.
+import { buildingPhrase } from '../lib/floors'
 import { useEffect, useState } from 'react'
 import type { Project, Variant } from '../lib/types'
 import { deleteDocBlob, loadDocBlob, saveDocBlob } from '../lib/idb'
@@ -168,7 +169,7 @@ export function ViewShots({ project, variant, capture }: { project: Project; var
       ) : (
         <div className="shot-grid">
           {shots.map((s) => {
-            const prompt = realisticPrompt(variant, style, VIEW_PHRASE[s.view])
+            const prompt = realisticPrompt(variant, style, VIEW_PHRASE[s.view], buildingPhrase(project))
             return (
               <article key={s.id} className="shot-card" data-testid="shot-card">
                 <div className="shot-pair">

@@ -1,4 +1,4 @@
-import { floorFromStructure, setFloors, upperFloorDrawings } from '../lib/floors'
+import { STOREY_TEXT, floorFromStructure, setFloors, storeyDrawings } from '../lib/floors'
 import type { FloorPlan } from '../lib/types'
 import { addFacade } from '../lib/facades'
 import { DataTable } from './DataTable'
@@ -132,23 +132,23 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
     if (r.errors.length) note(r.errors[0])
   }
 
-  // קומות עליונות: כל תוכנית קומה נקראת בנפרד, והקומה מוצבת מעל הקרקע
+  // כל המפלסים: מרתף, קומות עליונות וגג. כל תוכנית נקראת בנפרד ומוצבת מעל קומת הקרקע
   const doFloors = async (list: Drawing[], ground: Drawing) => {
-    const targets = upperFloorDrawings(list, ground.id).slice(0, 4)
+    const targets = storeyDrawings(list, ground.id).slice(0, 7)
     if (!targets.length) return
     const out: FloorPlan[] = []
-    for (const d of targets) {
-      setBusy(`קוראת קומה: ${d.title || 'תוכנית קומה'}`)
+    for (const { d, kind } of targets) {
+      setBusy(`קוראת ${STOREY_TEXT[kind]}: ${d.title || 'תוכנית'}`)
       try {
-        const f = floorFromStructure(latest(), d, await readStructure(doc, d), uid())
+        const f = floorFromStructure(latest(), d, await readStructure(doc, d), uid(), kind)
         if (f) out.push(f)
       } catch (e) {
-        note(`${d.title || 'תוכנית קומה'} לא נקראה: ${e instanceof Error ? e.message : String(e)}`)
+        note(`${d.title || 'תוכנית'} לא נקראה: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
     if (!out.length) return
     setFloors(project.id, out)
-    note(`${out.length === 1 ? 'קומה אחת נבנתה' : `${out.length} קומות נבנו`} מהתוכנית שלהן: ${out.map((f) => `${f.title} (${f.area.toFixed(2)} מ"ר, ${f.openings.length} פתחים)`).join(' · ')}`)
+    note(`${out.length === 1 ? 'מפלס אחד נבנה' : `${out.length} מפלסים נבנו`} מהתוכנית שלהם: ${out.map((f) => `${STOREY_TEXT[f.kind ?? 'floor']} ${f.title} (${f.area.toFixed(2)} מ"ר)`).join(' · ')}`)
   }
 
   // חזיתות: כל שרטוט חזית נחתך מהגיליון ונשמר להלבשה על הבית במודל

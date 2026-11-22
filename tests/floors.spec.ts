@@ -29,11 +29,22 @@ async function mock(page: Page) {
         { title: 'חזית דרומית ק.מ. 1:100', kind: 'elevation', floor: '', scale_den: 100 },
         { title: 'חתך א-א ק.מ. 1:100', kind: 'section', floor: '', scale_den: 100 },
       ]
-      return route.fulfill({ json: { result: { drawings: [{ ...kinds[(mapCall - 1) % 4], box: full }] } } })
+      // בעמוד החזית יש גם תוכנית מרתף, ובעמוד החתך גם תוכנית גג: כל אחת בחצי העמוד שלה
+      const left = { x0: W * 0.03, y0: H * 0.03, x1: W * 0.49, y1: H * 0.97 }
+      const right = { x0: W * 0.51, y0: H * 0.03, x1: W * 0.97, y1: H * 0.97 }
+      const i = (mapCall - 1) % 4
+      if (i === 2) return route.fulfill({ json: { result: { drawings: [{ ...kinds[2], box: left }, { title: 'תכנית מרתף ק.מ. 1:100', kind: 'basement_plan', floor: 'מרתף', scale_den: 100, box: right }] } } })
+      if (i === 3) return route.fulfill({ json: { result: { drawings: [{ ...kinds[3], box: left }, { title: 'תכנית גג ק.מ. 1:100', kind: 'roof_plan', floor: 'גג', scale_den: 100, box: right }] } } })
+      return route.fulfill({ json: { result: { drawings: [{ ...kinds[i], box: full }] } } })
     }
     if (body.task === 'structure') {
       const upper = String(body.hint || '').includes('קומה א')
       const empty = { plot: [], zones: [], levels: [], trees: [], retaining_walls: [] }
+      // מרתף וגג: מלבן בתוך השרטוט שלהם
+      if (/מרתף|גג/.test(String(body.hint || ''))) {
+        const R = (fx: number, fy: number) => ({ x: W * fx, y: H * fy })
+        return route.fulfill({ json: { result: { north_angle_deg: 0, units: [{ name: 'מפלס', footprint: [R(0.2, 0.2), R(0.8, 0.2), R(0.8, 0.5), R(0.2, 0.5)], wall_thickness_cm: 25, floor_level_rel: 0, floor_level_abs: 0 }], openings: [], ...empty } } })
+      }
       if (upper)
         // קומה א': צורת ר' של 12×9 שחסרה בה הפינה הדרום-מזרחית (מרפסת גג), עם שלושה חלונות ודלת למרפסת
         return route.fulfill({
@@ -94,16 +105,18 @@ test('קומה א נבנית מהתוכנית שלה, מוצבת מעל הקרק
   await page.getByRole('button', { name: 'יצירה והמשך להיתר' }).click()
   await page.getByRole('button', { name: 'היתר לדוגמה' }).click()
   await expect(page.getByTestId('permit-reader')).toBeVisible({ timeout: 30000 })
-  await expect(page.getByTestId('floors-panel')).toContainText('עוד לא נקראו קומות עליונות')
+  await expect(page.getByTestId('floors-panel')).toContainText('עוד לא נקראו מפלסים')
   await page.getByRole('button', { name: 'קריאה מלאה של ההיתר' }).click()
   await expect(page.getByText('קריאת ההיתר הסתיימה').first()).toBeVisible({ timeout: 30000 })
-  // שתי קריאות מבנה: קרקע וקומה א
-  expect(tasks.filter((t) => t === 'structure')).toHaveLength(2)
-  await expect(page.getByTestId('reader-result')).toContainText('קומה אחת נבנתה')
+  // ארבע קריאות מבנה: קרקע, מרתף, קומה א וגג
+  expect(tasks.filter((t) => t === 'structure')).toHaveLength(4)
+  await expect(page.getByTestId('reader-result')).toContainText('3 מפלסים נבנו')
   await page.getByRole('dialog').getByRole('button', { name: 'סגירה' }).click()
 
-  const card = page.getByTestId('floor-card')
-  await expect(card).toHaveCount(1)
+  await expect(page.getByTestId('floor-card')).toHaveCount(3)
+  await expect(page.getByTestId('floor-kind').nth(0)).toHaveValue('basement')
+  await expect(page.getByTestId('floor-kind').nth(2)).toHaveValue('roof')
+  const card = page.getByTestId('floor-card').filter({ hasText: 'תכנית קומה א' })
   await expect(card).toContainText('תכנית קומה א')
   await expect(card).toContainText('4')
   // שטח צורת הר': 12×9 פחות 5×4 = 88 מ"ר. השרטוט נחתך ב-94% מהעמוד, ולכן 88 × 0.94² = 77.76
@@ -115,11 +128,27 @@ test('קומה א נבנית מהתוכנית שלה, מוצבת מעל הקרק
     const s = p.permit.structure
     const m = p.permit.scale.metersPerPt
     const gx = Math.min(...s.units[0].footprint.map((v: { x: number }) => v.x * m))
-    const fx = Math.min(...p.floors[0].footprints[0].map((v: { x: number }) => v.x))
-    return { d: Math.abs(gx - fx), how: p.floors[0].how as string }
+    const fl = p.floors.find((x: { title: string }) => x.title.includes('קומה א'))
+    const fx = Math.min(...fl.footprints[0].map((v: { x: number }) => v.x))
+    return { d: Math.abs(gx - fx), how: fl.how as string }
   })
   expect(f.d).toBeLessThan(0.06)
   expect(f.how).toContain('100%')
+  // כיול מחדש: סיבוב מקלקל את ההצבה, גרירה מזיזה, והצבה אוטומטית מחזירה
+  const how = card.locator('.muted').last()
+  await card.getByTestId('floor-rotate').click()
+  await expect(how).toContainText('סובבה ידנית')
+  for (let i = 0; i < 3; i++) await card.getByTestId('floor-rotate').click()
+  const svg = card.getByTestId('floor-svg')
+  const bb = (await svg.boundingBox())!
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(bb.x + bb.width / 2 + 40, bb.y + bb.height / 2 + 10, { steps: 4 })
+  await page.mouse.up()
+  await expect(how).toContainText('הוזזה ידנית')
+  await card.getByTestId('floor-realign').click()
+  await expect(how).toContainText('הוצבה מחדש אוטומטית (100%')
+  await card.getByTestId('floor-height').fill('3.2')
   await page.getByTestId('floors-panel').scrollIntoViewIfNeeded()
   await page.screenshot({ path: 'shots/43-floors-panel.png' })
 
@@ -128,10 +157,22 @@ test('קומה א נבנית מהתוכנית שלה, מוצבת מעל הקרק
   await expect(page.getByTestId('floors-note')).toContainText('מתוכנית הקומה')
   await page.waitForTimeout(3000)
   await page.getByTestId('model-canvas').screenshot({ path: 'shots/44-floors-model.png' })
-  // בלי החזיתות רואים את הנפח והפתחים של הקומה
+  // בלי החזיתות רואים את החיפוי: קירות עם פתחים, מעקה גג
+  await expect(page.getByTestId('cladding')).toHaveValue('plaster')
   await page.getByTestId('facades-toggle').click()
   await page.waitForTimeout(900)
   await page.getByTestId('model-canvas').screenshot({ path: 'shots/45-floors-model-plain.png' })
+  await page.getByTestId('cladding').selectOption('stone')
+  await page.waitForTimeout(900)
+  await page.getByTestId('model-canvas').screenshot({ path: 'shots/48-clad-stone.png' })
+  // חתך במודל: רואים את המרתף ואת פנים הקומות
+  await page.getByTestId('section-toggle').click()
+  await expect(page.getByTestId('section-at')).toBeVisible()
+  await page.waitForTimeout(900)
+  await page.getByTestId('model-canvas').screenshot({ path: 'shots/49-section.png' })
+  await page.getByTestId('section-toggle').click()
+  await page.getByTestId('cladding').selectOption('none')
+  await page.waitForTimeout(600)
 
   await page.setViewportSize({ width: 390, height: 800 })
   await page.getByRole('link', { name: 'היתר' }).first().click()

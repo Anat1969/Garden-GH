@@ -1,5 +1,6 @@
 import { projectFacades } from '../lib/facades'
-import { upperLayers } from '../lib/floors'
+import { CLADDING, claddingOf, houseOf, setCladding } from '../lib/floors'
+import type { Cladding } from '../lib/types'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls as OrbitImpl } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -14,7 +15,7 @@ import { GardenLineMesh, GardenObjectMesh, SketchMesh, SurfMat, useSurfaceTextur
 import { MODEL_FINISH, ModelFinishCtx, useFinish, useModelFinish, type ModelFinish } from '../lib/finish'
 import { ElementEditor } from '../components/ElementEditor'
 import { hasBasis, numberedNames, surfaceArea, fmtNum, polyLength } from '../lib/bom'
-import { BuildingMass, FacadeSkins, HouseMat, NorthArrow, FlatText, GroundDim, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
+import { BuildingMass, FacadeSkins, SectionClip, HouseMat, NorthArrow, FlatText, GroundDim, PolySurface, SitePlinth, StairSurface, Tree, unitFootprints } from '../components/model3d'
 import { baseAbs } from '../lib/structureToElements'
 import { stairPlan } from '../lib/stairs'
 import { LABEL_TEXT } from '../lib/types'
@@ -235,7 +236,7 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
   )
 }
 
-function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view, facadesOn }: { project: Project; facadesOn: boolean; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
+function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view, facadesOn, section }: { project: Project; facadesOn: boolean; section: number | null; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
   const finish = useModelFinish()
   const real = finish === 'detailed'
   const elements = useMemo(() => {
@@ -280,8 +281,9 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
   const selEl = elements.find((e) => e.id === selected)
   const groundSel = Boolean(selEl && ((selEl.kind === 'wall' && selEl.scope === 'house') || selEl.kind === 'opening'))
   const footprints = useMemo(() => unitFootprints(project), [project])
-  const layers = useMemo(() => upperLayers(project, footprints), [project, footprints])
-  const skinLayers = useMemo(() => [{ fps: footprints, z0: 0, z1: layers[0]?.z0 ?? project.building?.groundHeight ?? 3 }, ...layers], [footprints, layers, project.building])
+  const house = useMemo(() => houseOf(project, footprints), [project, footprints])
+  const showHouse = Boolean(house.ground && (project.building || project.floors?.length))
+  const skinLayers = useMemo(() => (house.ground ? [house.ground, ...house.uppers] : []), [house])
   const st = project.permit?.structure
   const mpp = project.permit?.scale.metersPerPt ?? 0
   const base = baseAbs(project)
@@ -341,7 +343,8 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
           <SketchMesh key={e.id} s={e} selected={selected === e.id} onSelect={onSelect} />
         ) : null,
       )}
-      {layers.length > 0 && !groundSel && <BuildingMass footprints={footprints} b={project.building} layers={layers} />}
+      {showHouse && !groundSel && <BuildingMass footprints={footprints} house={house} clad={claddingOf(project)} />}
+      <SectionClip at={section === null ? null : bounds.minY - 1 + section * (bounds.size + 2)} />
       {facadesOn && footprints.length > 0 && !groundSel && <FacadeSkins facades={projectFacades(project)} layers={skinLayers} north={project.north || 0} />}
       {st && mpp > 0 && st.trees.map((t, i) => <Tree key={i} at={{ x: t.at.x * mpp, y: t.at.y * mpp }} r={t.r * mpp} kind={t.kind} level={levelAt(t.at.x * mpp, t.at.y * mpp)} />)}
       {(showDims || selected) && <GroundDims elements={showDims ? elements : elements.filter((e) => e.id === selected)} k={Math.max(0.38, bounds.size * 0.022)} compact={view.id === 'top'} selected={selected} onPick={(id) => onSelect(id)} />}
@@ -575,6 +578,9 @@ export default function ModelTab() {
   const selected = variant.elements.find((e) => e.id === selId) ?? null
   const [showDims, setShowDims] = useState(false)
   const [facadesOn, setFacadesOn] = useState(true)
+  const [sectionOn, setSectionOn] = useState(false)
+  const [sectionAt, setSectionAt] = useState(0.5)
+  const hasHouse = Boolean(project.building || project.floors?.length)
   const hasFacades = projectFacades(project).length > 0
   const [finish, setFinish] = useFinish<ModelFinish>('model', 'detailed')
   const [focusKey, setFocusKey] = useState(0)
@@ -669,7 +675,7 @@ export default function ModelTab() {
       <div className="model-box" data-testid="model-canvas">
         <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
-            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} facadesOn={facadesOn && hasFacades} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
+            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} facadesOn={facadesOn && hasFacades} section={sectionOn ? sectionAt : null} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
             <AutoSnapshot projectId={project.id} version={`${variant.id}:${variant.elements.length}:${finish}:${project.updatedAt}`} enabled={climateState.st.layer === 'none' && !selId && !showDims} />
           </ModelFinishCtx.Provider>
         </Canvas>
@@ -687,6 +693,26 @@ export default function ModelTab() {
             <button type="button" className={`btn small ${facadesOn ? 'active' : ''}`} aria-pressed={facadesOn} onClick={() => setFacadesOn((v) => !v)} title="שרטוטי החזית מההיתר, מולבשים על קירות הבית בהיטל ישר" data-testid="facades-toggle">
               חזיתות ההיתר
             </button>
+          )}
+          {hasHouse && (
+            <label className="tool-select" title="חומר החיפוי של קירות הבית במודל">
+              <span>חיפוי</span>
+              <select value={claddingOf(project)} data-testid="cladding" onChange={(e) => setCladding(project.id, e.target.value as Cladding)}>
+                {(Object.keys(CLADDING) as Cladding[]).map((c) => (
+                  <option key={c} value={c}>
+                    {CLADDING[c].t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {hasHouse && (
+            <span className="tool-group">
+              <button type="button" className={`btn small ${sectionOn ? 'active' : ''}`} aria-pressed={sectionOn} onClick={() => setSectionOn((v) => !v)} title="חותך את המודל במישור אנכי, כדי לראות את המרתף ואת פנים הקומות" data-testid="section-toggle">
+                חתך במודל
+              </button>
+              {sectionOn && <input type="range" min={0} max={1} step={0.01} value={sectionAt} onChange={(e) => setSectionAt(Number(e.target.value))} aria-label="מיקום החתך" data-testid="section-at" style={{ width: 110 }} />}
+            </span>
           )}
           <span className="tool-group" role="radiogroup" aria-label="רמת גימור">
             {MODEL_FINISH.map((f) => (
@@ -712,9 +738,9 @@ export default function ModelTab() {
       <aside className="side">
         {(project.floors?.length ?? 0) > 0 && (
           <div className="notice info" style={{ marginBottom: 10, fontSize: 13 }} data-testid="floors-note">
-            <b>עובדה:</b> {project.floors!.length === 1 ? 'הקומה העליונה נבנתה' : `${project.floors!.length} קומות עליונות נבנו`} מתוכנית הקומה: קו מתאר ופתחים.
+            <b>עובדה:</b> {project.floors!.length === 1 ? 'מפלס אחד נבנה' : `${project.floors!.length} מפלסים נבנו`} מתוכנית הקומה: קו מתאר ופתחים. המרתף נראה ב"חתך במודל".
             <br />
-            <b>הערכה:</b> ההצבה מעל הקרקע, גובה כל קומה, וגובה האדן והמשקוף של הפתחים.
+            <b>הערכה:</b> ההצבה מעל הקרקע, גובה כל קומה, גובה האדן והמשקוף, וחומר החיפוי. מכיילים מחדש במסך ההיתר.
           </div>
         )}
         {hasFacades && facadesOn && (

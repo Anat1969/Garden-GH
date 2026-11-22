@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as THREE from 'three'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
-import type { Building, Facade, FacadeSide, Pt, Surface } from '../lib/types'
+import type { Cladding, Facade, FacadeSide, Pt, Surface } from '../lib/types'
 import { facadeQuads } from '../lib/facades'
-import type { HouseLayer } from '../lib/floors'
+import { CLADDING, wallFaces, type House, type HouseLayer, type WallFace } from '../lib/floors'
 import { loadDocBlob } from '../lib/idb'
 import { MATERIALS } from '../lib/garden'
 import { bbox } from '../lib/geom'
@@ -279,37 +279,161 @@ export function HouseMat({ sel = false }: { sel?: boolean }) {
 
 // ---------- מסת הקומות העליונות והגג ----------
 
-export function BuildingMass({ footprints, b, layers }: { footprints: Pt[][]; b?: Building; layers: HouseLayer[] }) {
-  const top = layers.length ? layers[layers.length - 1].z1 : null
-  const topFps = layers.length ? layers[layers.length - 1].fps : footprints
-  const ridge = b?.ridgeRel && top && b.ridgeRel > top + 0.2 ? b.ridgeRel : null
-  const pitched = b && (b.roofType === 'gable' || b.roofType === 'mixed' || b.roofType === 'hip')
+export function BuildingMass({ footprints, house, clad }: { footprints: Pt[][]; house: House; clad: Cladding }) {
+  const finish = useModelFinish()
+  const dressed = clad !== 'none' && finish !== 'massing'
+  const c = CLADDING[clad]
+  const walls = useMemo(() => [house.ground, ...house.uppers, house.parapet].filter((l): l is HouseLayer => Boolean(l)), [house])
+  const slabFrom = house.uppers[0]?.fromPlan
   return (
     <>
       {/* תקרת קומת הקרקע: כשהקומה שמעל קטנה ממנה, החלק הגלוי הוא גג או מרפסת */}
-      {layers[0]?.fromPlan && footprints.map((fp, i) => <UpperBlock key={`s${i}`} fp={fp} z0={layers[0].z0 - 0.02} z1={layers[0].z0 + 0.12} />)}
-      {layers.map((l, i) => (
+      {slabFrom && footprints.map((fp, i) => <UpperBlock key={`s${i}`} fp={fp} z0={house.uppers[0].z0 - 0.02} z1={house.uppers[0].z0 + 0.12} color={dressed ? '#cfcac0' : undefined} />)}
+      {house.uppers.map((l, i) => (
         <group key={i}>
           {l.fps.map((fp, j) => (
             <UpperBlock key={j} fp={fp} z0={l.z0} z1={l.z1} />
           ))}
-          {l.openings.map((o, j) => (
-            <FloorOpening key={j} o={o} z0={l.z0} h={l.z1 - l.z0} />
-          ))}
+          {!dressed && l.openings.map((o, j) => <FloorOpening key={j} o={o} z0={l.z0} h={l.z1 - l.z0} />)}
         </group>
       ))}
-      {top !== null &&
-        topFps.map((fp, i) => (
-          <group key={`r${i}`}>
-            {ridge && pitched && <Gable fp={fp} eave={top} ridge={ridge} />}
-            {(!ridge || !pitched) && <UpperBlock fp={fp} z0={top} z1={top + 0.25} color="#a9aca8" roof />}
-          </group>
-        ))}
+      {/* מרתף: בטון, מתחת ל-0.00. נראה בחתך במודל */}
+      {house.basements.map((l, i) => l.fps.map((fp, j) => <UpperBlock key={`b${i}-${j}`} fp={fp} z0={l.z0} z1={l.z1 - 0.02} color="#8d8f8c" />))}
+      {dressed && <CladWalls layers={walls} clad={clad} />}
+      {house.uppers.length > 0 || house.roofFromPlan
+        ? house.roofFps.map((fp, i) => (
+            <group key={`r${i}`}>
+              {house.pitched && house.ridge ? <Gable fp={fp} eave={house.top} ridge={house.ridge} hip={house.hip} color={dressed ? c.roof : undefined} /> : <UpperBlock fp={fp} z0={house.top} z1={house.top + 0.25} color={dressed ? '#bdb9b0' : '#a9aca8'} />}
+            </group>
+          ))
+        : null}
     </>
   )
 }
 
-// פתח בקומה עליונה, מתוכנית הקומה: חלון בכחול בהיר, דלת בכתום, כמו בקומת הקרקע
+// טקסטורת חיפוי מצוירת: נדבכי אבן, לוחות עץ, לוחות בטון או טיח. אריח של 2×2 מטר.
+const cladCache = new Map<string, THREE.Texture>()
+function cladTexture(clad: Cladding): THREE.Texture {
+  const hit = cladCache.get(clad)
+  if (hit) return hit
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = 256
+  const x = cv.getContext('2d')!
+  const base = CLADDING[clad].color
+  x.fillStyle = base
+  x.fillRect(0, 0, 256, 256)
+  let seed = 7
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const shade = (a: number) => `rgba(${a > 0 ? 255 : 0},${a > 0 ? 255 : 0},${a > 0 ? 255 : 0},${Math.abs(a)})`
+  if (clad === 'stone') {
+    for (let r = 0; r < 8; r++) {
+      let px = r % 2 ? -20 : 0
+      while (px < 256) {
+        const w = 40 + rnd() * 50
+        x.fillStyle = shade((rnd() - 0.5) * 0.16)
+        x.fillRect(px + 1, r * 32 + 1, w - 2, 30)
+        px += w
+      }
+    }
+    x.strokeStyle = 'rgba(90,75,50,0.35)'
+    for (let r = 0; r <= 8; r++) (x.beginPath(), x.moveTo(0, r * 32), x.lineTo(256, r * 32), x.stroke())
+  } else if (clad === 'wood') {
+    for (let r = 0; r < 16; r++) {
+      x.fillStyle = shade((rnd() - 0.5) * 0.2)
+      x.fillRect(0, r * 16, 256, 15)
+    }
+  } else if (clad === 'concrete') {
+    x.strokeStyle = 'rgba(0,0,0,0.18)'
+    x.strokeRect(1, 1, 254, 127)
+    x.strokeRect(1, 129, 254, 126)
+    for (const [cx, cy] of [[24, 24], [232, 24], [24, 104], [232, 104], [24, 152], [232, 152], [24, 232], [232, 232]]) (x.beginPath(), x.arc(cx, cy, 3, 0, 7), (x.fillStyle = 'rgba(0,0,0,0.25)'), x.fill())
+  }
+  for (let i = 0; i < 1400; i++) {
+    x.fillStyle = shade((rnd() - 0.5) * 0.07)
+    x.fillRect(rnd() * 256, rnd() * 256, 2, 2)
+  }
+  const t = new THREE.CanvasTexture(cv)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.colorSpace = THREE.SRGBColorSpace
+  t.anisotropy = 8
+  cladCache.set(clad, t)
+  return t
+}
+
+// קירות החיפוי: כל פאה חיצונית היא משטח עם חורים לפתחים, ובכל חור זכוכית או דלת
+function CladWalls({ layers, clad }: { layers: HouseLayer[]; clad: Cladding }) {
+  const { wall, glass, door } = useMemo(() => {
+    const W: number[] = []
+    const UV: number[] = []
+    const G: number[] = []
+    const D: number[] = []
+    const quad = (out: number[], f: WallFace, s0: number, s1: number, z0: number, z1: number, off: number) => {
+      const P = (sv: number, z: number) => [f.a.x + f.dir.x * sv + f.n.x * off, z, f.a.y + f.dir.y * sv + f.n.y * off]
+      out.push(...P(s0, z0), ...P(s1, z0), ...P(s1, z1), ...P(s0, z0), ...P(s1, z1), ...P(s0, z1))
+    }
+    for (const l of layers)
+      for (const f of wallFaces(l)) {
+        const shape = new THREE.Shape([new THREE.Vector2(0, f.z0), new THREE.Vector2(f.len, f.z0), new THREE.Vector2(f.len, f.z1), new THREE.Vector2(0, f.z1)])
+        for (const h of f.holes) shape.holes.push(new THREE.Path([new THREE.Vector2(h.s0, h.z0), new THREE.Vector2(h.s0, h.z1), new THREE.Vector2(h.s1, h.z1), new THREE.Vector2(h.s1, h.z0)]))
+        const g = new THREE.ShapeGeometry(shape).toNonIndexed()
+        const pos = g.getAttribute('position')
+        for (let i = 0; i < pos.count; i++) {
+          const sv = pos.getX(i)
+          const z = pos.getY(i)
+          W.push(f.a.x + f.dir.x * sv + f.n.x * 0.03, z, f.a.y + f.dir.y * sv + f.n.y * 0.03)
+          UV.push(sv / 2, z / 2)
+        }
+        g.dispose()
+        for (const h of f.holes) quad(h.door ? D : G, f, h.s0, h.s1, h.z0, h.z1, -0.04)
+      }
+    const mk = (v: number[], uv?: number[]) => {
+      if (!v.length) return null
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3))
+      if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+      g.computeVertexNormals()
+      return g
+    }
+    return { wall: mk(W, UV), glass: mk(G), door: mk(D) }
+  }, [layers])
+  useEffect(() => () => [wall, glass, door].forEach((g) => g?.dispose()), [wall, glass, door])
+  const tex = useMemo(() => cladTexture(clad), [clad])
+  return (
+    <>
+      {wall && (
+        <mesh geometry={wall} castShadow receiveShadow>
+          <meshStandardMaterial map={tex} roughness={clad === 'wood' ? 0.7 : 0.92} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {glass && (
+        <mesh geometry={glass}>
+          <meshStandardMaterial color="#7fa8bd" roughness={0.12} metalness={0.35} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {door && (
+        <mesh geometry={door}>
+          <meshStandardMaterial color="#5a4634" roughness={0.6} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+    </>
+  )
+}
+
+// חתך במודל: כל מה שמעבר למישור נחתך, כמו תיבת חתך ברוויט. כך רואים את המרתף ואת פנים הקומות.
+export function SectionClip({ at }: { at: number | null }) {
+  const gl = useThree((s) => s.gl)
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    gl.clippingPlanes = at === null ? [] : [new THREE.Plane(new THREE.Vector3(0, 0, -1), at)]
+    invalidate()
+    return () => {
+      gl.clippingPlanes = []
+    }
+  }, [at, gl, invalidate])
+  return null
+}
+
+// פתח בקומה עליונה כשאין חיפוי: חלון בכחול בהיר, דלת בכתום, כמו בקומת הקרקע
 function FloorOpening({ o, z0, h }: { o: HouseLayer['openings'][number]; z0: number; h: number }) {
   const len = Math.hypot(o.b.x - o.a.x, o.b.y - o.a.y)
   if (len < 0.3) return null
@@ -325,7 +449,7 @@ function FloorOpening({ o, z0, h }: { o: HouseLayer['openings'][number]; z0: num
   )
 }
 
-function UpperBlock({ fp, z0, z1 }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
+function UpperBlock({ fp, z0, z1, color }: { fp: Pt[]; z0: number; z1: number; color?: string; roof?: boolean }) {
   const geom = useMemo(() => {
     const shape = new THREE.Shape(fp.map((v) => new THREE.Vector2(v.x, -v.y)))
     const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false })
@@ -335,16 +459,16 @@ function UpperBlock({ fp, z0, z1 }: { fp: Pt[]; z0: number; z1: number; color?: 
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} position={[0, z0, 0]} castShadow receiveShadow>
-      <HouseMat />
+      {color ? <meshStandardMaterial color={color} roughness={0.9} side={THREE.DoubleSide} /> : <HouseMat />}
     </mesh>
   )
 }
 
 // גג גמלון מעל המלבן החוסם, הרכס לאורך הצלע הארוכה
-function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
+function Gable({ fp, eave, ridge, hip = false, color }: { fp: Pt[]; eave: number; ridge: number; hip?: boolean; color?: string }) {
   const geom = useMemo(() => {
     const bb = bbox(fp)
-    const o = 0 // בלי בליטות: מסה נקייה
+    const o = color ? 0.4 : 0 // גג לבוש בולט מעט מעבר לקירות. מסה: בלי בליטות
     const x0 = bb.x - o
     const x1 = bb.x + bb.w + o
     const z0 = bb.y - o
@@ -352,7 +476,17 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
     const alongX = bb.w >= bb.h
     const v: number[] = []
     const push = (...p: number[][]) => p.forEach((q) => v.push(...q))
-    if (alongX) {
+    if (hip) {
+      // ארבעה שיפועים: הרכס מקוצר בחצי הרוחב בכל קצה
+      const zm = (z0 + z1) / 2
+      const xm = (x0 + x1) / 2
+      const k = Math.min(x1 - x0, z1 - z0) / 2
+      const A = alongX ? [x0 + k, ridge, zm] : [xm, ridge, z0 + k]
+      const B = alongX ? [x1 - k, ridge, zm] : [xm, ridge, z1 - k]
+      const c = [[x0, eave, z0], [x1, eave, z0], [x1, eave, z1], [x0, eave, z1]]
+      if (alongX) push(c[0], c[1], B, c[0], B, A, c[2], c[3], A, c[2], A, B, c[3], c[0], A, c[1], c[2], B)
+      else push(c[1], c[2], B, c[1], B, A, c[3], c[0], A, c[3], A, B, c[0], c[1], A, c[2], c[3], B)
+    } else if (alongX) {
       const zm = (z0 + z1) / 2
       push([x0, eave, z0], [x1, eave, z0], [x1, ridge, zm], [x0, eave, z0], [x1, ridge, zm], [x0, ridge, zm])
       push([x0, eave, z1], [x0, ridge, zm], [x1, ridge, zm], [x0, eave, z1], [x1, ridge, zm], [x1, eave, z1])
@@ -376,11 +510,11 @@ function Gable({ fp, eave, ridge }: { fp: Pt[]; eave: number; ridge: number }) {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
     g.computeVertexNormals()
     return g
-  }, [fp, eave, ridge])
+  }, [fp, eave, ridge, hip, color])
   useEffect(() => () => geom.dispose(), [geom])
   return (
     <mesh geometry={geom} castShadow>
-      <HouseMat />
+      {color ? <meshStandardMaterial color={color} roughness={0.8} side={THREE.DoubleSide} /> : <HouseMat />}
     </mesh>
   )
 }

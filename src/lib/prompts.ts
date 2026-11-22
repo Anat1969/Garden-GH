@@ -32,7 +32,7 @@ export function projectPrompt(v: Variant, style: StyleGuide | null): { distill: 
 
 // הנחיה ל-ChatGPT: להפוך תמונת מבט מהמודל לצילום ריאליסטי, בלי לשנות את התכנון.
 // מבנה: משפט זיקוק, ואז הנחיה בעברית. בסוף הסגנון הקבוע והשלילות לכלים שאינם מידג'רני.
-export function realisticPrompt(v: Variant, style: StyleGuide | null, viewLabel: string): string {
+export function realisticPrompt(v: Variant, style: StyleGuide | null, viewLabel: string, building = ''): string {
   const byMat = new Map<string, number>()
   for (const e of v.elements) if (e.kind === 'surface' && !e.stairs) byMat.set(MATERIALS[e.material].text, (byMat.get(MATERIALS[e.material].text) ?? 0) + surfaceArea(e))
   const mats = [...byMat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([m]) => m)
@@ -44,7 +44,7 @@ export function realisticPrompt(v: Variant, style: StyleGuide | null, viewLabel:
     '',
     `הפוך את התמונה המצורפת לצילום אמיתי. היא ${viewLabel} של מודל תכנון גינה.`,
     'שמור בדיוק על הקומפוזיציה, נקודת המבט, הפרופורציות, קווי הבית והגבולות, ומיקום כל משטח, עץ, שביל ופריט. אל תוסיף ואל תזיז אלמנטים.',
-    'הבית במודל שקוף ואפור: הפוך אותו לבית ישראלי אמיתי בטיח בהיר, עם חלונות זכוכית במקום הכחול ודלתות במקום הכתום.',
+    building || 'הבית במודל שקוף ואפור: הפוך אותו לבית ישראלי אמיתי בטיח בהיר, עם חלונות זכוכית במקום הכחול ודלתות במקום הכתום.',
     mats.length ? `המשטחים, לפי הצבעים במודל: ${mats.join(', ')}. חומרים אמיתיים במרקם מוחשי ובגבולות חדים.` : '',
     objs.length ? `בגינה: ${objs.join(', ')}.` : '',
     stairs ? 'המדרגות: מדרגות אבן אמיתיות, עם שלחים ורומים כמו במודל.' : '',
