@@ -107,15 +107,41 @@ export function placeInImage(data: Uint8ClampedArray, w: number, h: number, know
     }
   }
   if (known && known.pxPerM > 0 && known.widthM > 0) {
-    const wp = known.widthM * known.pxPerM
+    // קנה המידה ידוע: רוחב הבית וגובהו בפיקסלים ידועים, ונשאר רק למצוא איפה הוא יושב בשרטוט.
+    // אופקית: החלון ברוחב הבית שיש בו הכי הרבה דיו. אנכית: ראש הבניין הוא השורה העליונה שיש בה דיו לרוחב החלון, והקרקע נגזרת ממנו.
+    const wp = Math.round(known.widthM * known.pxPerM)
     const hp = known.heightM * known.pxPerM
-    // מקבלים את מידות קנה המידה רק כשהן קרובות למה שנמצא בתמונה. אחרת השרטוט כנראה בקנה מידה אחר.
-    if (Math.abs(wp / (x1 - x0) - 1) < 0.25) {
-      const c = (x0 + x1) / 2
-      x0 = c - wp / 2
-      x1 = c + wp / 2
-      if (hp > 4 && g - hp > 0) top = g - hp
-      how = 'רוחב וגובה לפי קנה המידה, מיקום לפי קו הקרקע וקווי הקירות'
+    if (hp > 20 && hp < h) {
+      const mx = Math.round(w * 0.02)
+      const my = Math.round(h * 0.04)
+      // אופקית: כשהבית צר מהשרטוט, החלון ברוחב הבית שיש בו הכי הרבה דיו. כשהוא ממלא את השרטוט, נשארים עם קווי הקירות שנמצאו.
+      if (wp > 20 && wp <= w - 2 * mx) {
+        const pre = new Float64Array(w + 1)
+        for (let x = 0; x < w; x++) {
+          let c = 0
+          for (let y = 0; y < h; y++) c += dark[y * w + x]
+          pre[x + 1] = pre[x] + c
+        }
+        let bx = mx
+        let bs = -1
+        for (let x = mx; x + wp <= w - mx; x++) if (pre[x + wp] - pre[x] > bs) (bs = pre[x + wp] - pre[x]), (bx = x)
+        x0 = bx
+        x1 = bx + wp
+      }
+      // אנכית: ראש הבניין הוא השורה העליונה שיש בה דיו לרוחב הבית, מתחת לקו המסגרת. הקרקע נגזרת ממנו לפי קנה המידה.
+      let ty = my
+      const span = Math.max(1, x1 - x0)
+      for (let y = my; y < h; y++) {
+        let c = 0
+        for (let x = Math.round(x0); x < Math.round(x1); x++) c += dark[y * w + x]
+        if (c >= span * 0.2) {
+          ty = y
+          break
+        }
+      }
+      top = ty
+      g = Math.min(h - 1, ty + hp)
+      how = 'גובה לפי קנה המידה, מיקום לפי הדיו בשרטוט'
     }
   }
   const cl = (v: number) => Math.min(1, Math.max(0, v))

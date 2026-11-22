@@ -1,3 +1,6 @@
+import { useEffect } from 'react'
+import { updateProject } from '../lib/store'
+import { PRECISION_ZOOM, geocode } from '../lib/geo'
 import { NavLink, Outlet, useLocation, useOutletContext, useParams, Link } from 'react-router-dom'
 import { hasBasis } from '../lib/bom'
 import { activeVariant, useApp } from '../lib/store'
@@ -14,19 +17,20 @@ export interface ProjectCtx {
 export const useProject = () => useOutletContext<ProjectCtx>()
 
 // סדר העבודה: שישה שלבים, כמו בדף הבית. בכל שלב תחנה אחת או יותר (1.1, 1.2...), עם סימון "הושלם"
-export const STAGES = ['פרויקט והיתר', 'תוכנית: קירות ופתחים', 'תכנון הגינה', 'מודל ואקלים', 'כמויות ותקציב', 'הגשה וחלופות']
+// ארבעה שלבים, לפי סדר העבודה של ענת: רואים את הבית בסביבה שלו, לומדים את תנאי המקום, מתכננים, ומפיקים.
+export const STAGES = ['הבית בסביבה שלו', 'תנאי המקום', 'תכנון הגינה', 'כמויות והגשה']
 const TABS: { to: string; t: string; stage: number; end?: boolean; done: (p: Project, v: Variant) => boolean }[] = [
   { to: '', t: 'פרטים ודרישות', stage: 0, end: true, done: (p) => Boolean(p.address.trim()) },
   { to: 'permit', t: 'היתר', stage: 0, done: (p) => Boolean(p.permit && p.permit.pageCount >= 0 && p.permit.fileName) },
   { to: 'dims', t: 'מידות', stage: 0, done: (p) => hasBasis(p) },
-  { to: 'plan', t: 'תוכנית ועריכה', stage: 1, done: (_p, v) => v.elements.length > 0 && v.elements.every((e) => e.approved || e.kind === 'sketch') },
-  { to: 'brief', t: 'אתגרים והצעה', stage: 2, done: (p) => Boolean(p.brief) },
+  { to: 'model', t: 'מודל תלת-ממדי ואקלים', stage: 0, done: (_p, v) => v.elements.length > 0 },
+  { to: 'brief', t: 'אתגרים והצעה', stage: 1, done: (p) => Boolean(p.brief) },
   { to: 'design', t: 'תכנון הגינה', stage: 2, done: (_p, v) => v.elements.some((e) => e.kind === 'surface' || e.kind === 'object') },
-  { to: 'model', t: 'מודל תלת-ממדי ואקלים', stage: 3, done: (_p, v) => v.elements.length > 0 },
-  { to: 'bom', t: 'כתב כמויות', stage: 4, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
-  { to: 'phases', t: 'שלבים ותקציב', stage: 4, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
-  { to: 'sheet', t: 'גליון להדפסה', stage: 5, done: (p) => Boolean(p.sheet?.poem || p.sheet?.post) },
-  { to: 'variants', t: 'חלופות', stage: 5, done: (p) => p.variants.length > 1 },
+  { to: 'plan', t: 'תוכנית ועריכה', stage: 2, done: (_p, v) => v.elements.length > 0 && v.elements.every((e) => e.approved || e.kind === 'sketch') },
+  { to: 'bom', t: 'כתב כמויות', stage: 3, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
+  { to: 'phases', t: 'שלבים ותקציב', stage: 3, done: (_p, v) => v.elements.some((e) => e.kind === 'surface') },
+  { to: 'sheet', t: 'גליון להדפסה', stage: 3, done: (p) => Boolean(p.sheet?.poem || p.sheet?.post) },
+  { to: 'variants', t: 'חלופות', stage: 3, done: (p) => p.variants.length > 1 },
 ]
 const tabNo = (t: (typeof TABS)[number]) => `${t.stage + 1}.${TABS.filter((x) => x.stage === t.stage).indexOf(t) + 1}`
 
@@ -114,9 +118,28 @@ export default function ProjectLayout() {
           </div>
         ))}
       </nav>
+      <AutoLocate project={project} />
       {seg !== 'sheet' && seg !== 'variants' && <ContextStrip project={project} variant={variant} />}
       <Outlet context={{ project, variant } satisfies ProjectCtx} />
       <StepNav />
     </div>
   )
+}
+
+// מיקום אוטומטי: כתובת הפרויקט מחופשת על המפה ברגע שהפרויקט נפתח, בכל מסך, כדי שהמודל יוצג בתוך הסביבה שלו
+function AutoLocate({ project }: { project: Project }) {
+  useEffect(() => {
+    const addr = project.address?.trim()
+    if (!addr || project.location || localStorage.getItem('garden.autoRead') === '0') return
+    const key = `garden.autoLocate.${project.id}.${addr}`
+    if (sessionStorage.getItem(key)) return
+    sessionStorage.setItem(key, '1')
+    void geocode(addr)
+      .then((r) => {
+        const h = r[0]
+        if (h) updateProject(project.id, (p) => (p.location ? p : { ...p, location: { lat: h.lat, lon: h.lon, zoom: PRECISION_ZOOM[h.precision], source: 'address', label: h.label, precision: h.precision } }))
+      })
+      .catch(() => undefined)
+  }, [project.id, project.address, project.location])
+  return null
 }

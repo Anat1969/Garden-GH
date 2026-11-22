@@ -29,9 +29,10 @@ async function mock(page: Page) {
         { title: 'חזית דרומית ק.מ. 1:100', kind: 'elevation', floor: '', scale_den: 100 },
         { title: 'חתך א-א ק.מ. 1:100', kind: 'section', floor: '', scale_den: 100 },
       ]
-      // בעמוד החזית יש גם תוכנית מרתף, ובעמוד החתך גם תוכנית גג: כל אחת בחצי העמוד שלה
-      const left = { x0: W * 0.03, y0: H * 0.03, x1: W * 0.49, y1: H * 0.97 }
-      const right = { x0: W * 0.51, y0: H * 0.03, x1: W * 0.97, y1: H * 0.97 }
+      // בעמוד החזית יש גם תוכנית מרתף, ובעמוד החתך גם תוכנית גג
+      // תוכנית קומה אמיתית היא בגודל של תוכנית הקרקע, ולכן המרתף והגג בגודל מלא. החזית והחתך ברצועה צרה.
+      const left = { x0: W * 0.03, y0: H * 0.03, x1: W * 0.97, y1: H * 0.2 }
+      const right = { x0: W * 0.03, y0: H * 0.22, x1: W * 0.97, y1: H * 0.97 }
       const i = (mapCall - 1) % 4
       if (i === 2) return route.fulfill({ json: { result: { drawings: [{ ...kinds[2], box: left }, { title: 'תכנית מרתף ק.מ. 1:100', kind: 'basement_plan', floor: 'מרתף', scale_den: 100, box: right }] } } })
       if (i === 3) return route.fulfill({ json: { result: { drawings: [{ ...kinds[3], box: left }, { title: 'תכנית גג ק.מ. 1:100', kind: 'roof_plan', floor: 'גג', scale_den: 100, box: right }] } } })

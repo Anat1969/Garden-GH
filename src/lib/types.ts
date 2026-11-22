@@ -110,6 +110,7 @@ export interface Drawing {
   title: string
   floor: string
   scaleDen: number | null
+  anchor?: { x: number; y: number } // פינת המסגרת שבה השרטוט יושב: העוגן להצבת הקומות זו מעל זו
 }
 
 export interface Pt {

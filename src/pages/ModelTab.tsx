@@ -1,3 +1,4 @@
+import { AerialGround } from '../components/AerialGround'
 import { projectFacades } from '../lib/facades'
 import { CLADDING, claddingOf, houseOf, setCladding } from '../lib/floors'
 import type { Cladding } from '../lib/types'
@@ -236,7 +237,7 @@ function FenceMesh({ f, selected, onSelect }: { f: Fence; selected: boolean; onS
   )
 }
 
-function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view, facadesOn, section }: { project: Project; facadesOn: boolean; section: number | null; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
+function Scene({ project, elements: rawElements, selected, onSelect, showDims, focusKey, climate, layer, season, view, facadesOn, section, aerial }: { project: Project; facadesOn: boolean; section: number | null; aerial: boolean; elements: Element[]; selected: string | null; onSelect: (id: string | null) => void; showDims: boolean; focusKey: number; climate: ClimateData; layer: ClimateLayer; season: import('../lib/sun').Season; view: { id: ViewPreset; key: number } }) {
   const finish = useModelFinish()
   const real = finish === 'detailed'
   const elements = useMemo(() => {
@@ -282,6 +283,13 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
   const groundSel = Boolean(selEl && ((selEl.kind === 'wall' && selEl.scope === 'house') || selEl.kind === 'opening'))
   const footprints = useMemo(() => unitFootprints(project), [project])
   const house = useMemo(() => houseOf(project, footprints), [project, footprints])
+  const houseCenter = useMemo(() => {
+    const pts = footprints.flat()
+    if (!pts.length) return null
+    const xs = pts.map((v) => v.x)
+    const ys = pts.map((v) => v.y)
+    return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+  }, [footprints])
   const showHouse = Boolean(house.ground && (project.building || project.floors?.length))
   const skinLayers = useMemo(() => (house.ground ? [house.ground, ...house.uppers] : []), [house])
   const st = project.permit?.structure
@@ -309,6 +317,9 @@ function Scene({ project, elements: rawElements, selected, onSelect, showDims, f
         </>
       )}
       {real && <Atmosphere center={center} size={bounds.size} sunDir={sunDir} />}
+      {aerial && project.location && (
+        <AerialGround lat={project.location.lat} lon={project.location.lon} north={project.north || 0} at={houseCenter ?? { x: bounds.cx, y: bounds.cy }} y={groundY + 0.03} />
+      )}
       {real ? (
         <NatureGround center={center} size={bounds.size} y={groundY} onClick={() => onSelect(null)} />
       ) : (
@@ -579,6 +590,7 @@ export default function ModelTab() {
   const [showDims, setShowDims] = useState(false)
   const [facadesOn, setFacadesOn] = useState(true)
   const [sectionOn, setSectionOn] = useState(false)
+  const [aerialOn, setAerialOn] = useState(true)
   const [sectionAt, setSectionAt] = useState(0.5)
   const hasHouse = Boolean(project.building || project.floors?.length)
   const hasFacades = projectFacades(project).length > 0
@@ -675,7 +687,7 @@ export default function ModelTab() {
       <div className="model-box" data-testid="model-canvas">
         <Canvas frameloop="demand" shadows="soft" dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 2000 }} gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => (glRef.current = gl)} onPointerMissed={() => select(null)}>
           <ModelFinishCtx.Provider value={finish}>
-            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} facadesOn={facadesOn && hasFacades} section={sectionOn ? sectionAt : null} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
+            <Scene project={project} elements={variant.elements} selected={selId} onSelect={select} showDims={showDims} facadesOn={facadesOn && hasFacades} section={sectionOn ? sectionAt : null} aerial={aerialOn} focusKey={focusKey} climate={climate} layer={climateState.st.layer} season={climateState.st.season} view={view} />
             <AutoSnapshot projectId={project.id} version={`${variant.id}:${variant.elements.length}:${finish}:${project.updatedAt}`} enabled={climateState.st.layer === 'none' && !selId && !showDims} />
           </ModelFinishCtx.Provider>
         </Canvas>
@@ -692,6 +704,11 @@ export default function ModelTab() {
           {hasFacades && (
             <button type="button" className={`btn small ${facadesOn ? 'active' : ''}`} aria-pressed={facadesOn} onClick={() => setFacadesOn((v) => !v)} title="שרטוטי החזית מההיתר, מולבשים על קירות הבית בהיטל ישר" data-testid="facades-toggle">
               חזיתות ההיתר
+            </button>
+          )}
+          {project.location && (
+            <button type="button" className={`btn small ${aerialOn ? 'active' : ''}`} aria-pressed={aerialOn} onClick={() => setAerialOn((v) => !v)} title="תצלום אוויר של הסביבה מתחת למודל, לפי מיקום הפרויקט על המפה. תצלום: Esri" data-testid="aerial-toggle">
+              הסביבה
             </button>
           )}
           {hasHouse && (

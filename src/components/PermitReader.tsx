@@ -1,9 +1,10 @@
 import { STOREY_TEXT, floorFromStructure, setFloors, storeyDrawings } from '../lib/floors'
 import type { FloorPlan } from '../lib/types'
-import { addFacade } from '../lib/facades'
+import { addFacade, sideFromTitle } from '../lib/facades'
+import { unitFootprints } from '../lib/structureToElements'
 import { DataTable } from './DataTable'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type { Building, Drawing, DrawingKind, Permit, Project } from '../lib/types'
 import { DRAWING_KIND_TEXT } from '../lib/types'
@@ -38,6 +39,7 @@ const MEANING_TEXT: Record<string, string> = {
 const ROOF_TEXT: Record<Building['roofType'], string> = { gable: 'גמלון (שני שיפועים)', hip: 'ארבעה שיפועים', flat: 'שטוח', shed: 'שיפוע אחד', mixed: 'משולב' }
 
 export function PermitReader({ project, doc }: { project: Project; doc: PDFDocumentProxy }) {
+  const nav = useNavigate()
   const permit = project.permit!
   const [busy, setBusy] = useState<string | null>(null)
   const [log, setLog] = useState<string[]>([])
@@ -108,7 +110,9 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
   }
 
   const doHeights = async (list: Drawing[]) => {
-    const targets = list.filter((d) => d.kind === 'section' || d.kind === 'elevation').slice(0, 8)
+    // שני חתכים ושתי חזיתות מספיקים למפלסים, והקריאה מהירה פי שניים
+    const big = (k: Drawing['kind']) => list.filter((d) => d.kind === k && (d.scaleDen ?? 100) >= 100).sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h).slice(0, 2)
+    const targets = [...big('section'), ...big('elevation')]
     if (!targets.length) {
       note('לא נמצאו חתכים או חזיתות לקריאת גבהים')
       return
@@ -136,19 +140,48 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
   const doFloors = async (list: Drawing[], ground: Drawing) => {
     const targets = storeyDrawings(list, ground.id).slice(0, 7)
     if (!targets.length) return
-    const out: FloorPlan[] = []
-    for (const { d, kind } of targets) {
-      setBusy(`קוראת ${STOREY_TEXT[kind]}: ${d.title || 'תוכנית'}`)
-      try {
-        const f = floorFromStructure(latest(), d, await readStructure(doc, d), uid(), kind)
-        if (f) out.push(f)
-      } catch (e) {
-        note(`${d.title || 'תוכנית'} לא נקראה: ${e instanceof Error ? e.message : String(e)}`)
-      }
-    }
+    setBusy(`קוראת ${targets.length} מפלסים: מרתף, קומות וגג`)
+    const read = await Promise.all(
+      targets.map(async ({ d, kind }) => {
+        try {
+          return floorFromStructure(latest(), d, await readStructure(doc, d), uid(), kind)
+        } catch (e) {
+          note(`${d.title || 'תוכנית'} לא נקראה: ${e instanceof Error ? e.message : String(e)}`)
+          return null
+        }
+      }),
+    )
+    const out = read.filter((f): f is FloorPlan => Boolean(f))
     if (!out.length) return
     setFloors(project.id, out)
     note(`${out.length === 1 ? 'מפלס אחד נבנה' : `${out.length} מפלסים נבנו`} מהתוכנית שלהם: ${out.map((f) => `${STOREY_TEXT[f.kind ?? 'floor']} ${f.title} (${f.area.toFixed(2)} מ"ר)`).join(' · ')}`)
+  }
+
+  // צפון מהחזיתות, כשאין חץ צפון בתוכנית: החזית הרחבה מראה את הצד הארוך של הבית.
+  // אם החזיתות המערבית והמזרחית הן הרחבות, הצד הארוך פונה מזרחה ומערבה, ולכן הצפון הוא לאורך הצד הארוך.
+  const guessNorth = (list: Drawing[]) => {
+    const p = latest()
+    if (p.northSet || (p.permit?.structure?.northDeg ?? 0) !== 0) return
+    const fp = unitFootprints(p).flat()
+    if (!fp.length) return
+    const xs = fp.map((v) => v.x)
+    const ys = fp.map((v) => v.y)
+    const longX = Math.max(...xs) - Math.min(...xs) > (Math.max(...ys) - Math.min(...ys)) * 1.25
+    const longY = Math.max(...ys) - Math.min(...ys) > (Math.max(...xs) - Math.min(...xs)) * 1.25
+    const avg = (sides: string[]) => {
+      const w = list.filter((d) => d.kind === 'elevation' && sides.includes(sideFromTitle(d.title) ?? '')).map((d) => d.box.w)
+      return w.length ? w.reduce((a, b) => a + b, 0) / w.length : 0
+    }
+    const we = avg(['W', 'E'])
+    const ns = avg(['N', 'S'])
+    if (!we || !ns || (!longX && !longY)) return
+    const weLong = we > ns * 1.25
+    const nsLong = ns > we * 1.25
+    if (!weLong && !nsLong) return
+    // הצד הארוך נראה בחזיתות מערב ומזרח: הצפון לאורכו. אחרת הצפון בניצב לו.
+    const north = (weLong && longX) || (nsLong && longY) ? 90 : 0
+    updateProject(project.id, (q) => ({ ...q, north, extracted: { ...q.extracted, north: 'מוערך מרוחב החזיתות' } }))
+    note(`הצפון הוערך מרוחב החזיתות: ${north === 90 ? 'ימינה או שמאלה בתוכנית' : 'למעלה או למטה בתוכנית'}. בודקים מול תצלום האוויר במודל, ומתקנים בניתוח האקלים.`)
   }
 
   // חזיתות: כל שרטוט חזית נחתך מהגיליון ונשמר להלבשה על הבית במודל
@@ -215,12 +248,30 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       useDrawing(g)
       note(`שרטוט העבודה: ${g.title || DRAWING_KIND_TEXT[g.kind]}`)
       await doStructure(g)
-      await doHeights(list)
-      await doDims(g)
+      // מפלסים, מידות וקומות נקראים במקביל: שלושתם תלויים רק בתוכנית הקרקע
+      await Promise.all([doHeights(list), doDims(g), doFloors(list, g)])
       buildElements()
-      await doFloors(list, g)
+      guessNorth(list)
       await doFacades(list)
     }, 'קריאת ההיתר הסתיימה')
+
+  // קריאה אוטומטית: היתר שהועלה ועוד לא נקרא נקרא לבד, ובסיום עוברים למודל. פעם אחת לכל קובץ.
+  const autoKey = `garden.autoRead.${project.id}.${permit.fileName}`
+  useEffect(() => {
+    if (!aiAvailable || permit.structure || localStorage.getItem('garden.autoRead') === '0' || sessionStorage.getItem(autoKey)) return
+    sessionStorage.setItem(autoKey, '1')
+    void fullRead().then(() => {
+      if (latest().permit?.structure && activeHasHouse()) {
+        setResult(null)
+        toast('ההיתר נקרא. הבית מוצג במודל, בתוך הסביבה שלו.')
+        nav('../model')
+      }
+    })
+  }, [doc]) // eslint-disable-line react-hooks/exhaustive-deps
+  const activeHasHouse = () => {
+    const p = latest()
+    return (p.variants.find((v) => v.id === p.activeVariantId) ?? p.variants[0])?.elements.some((e) => e.kind === 'wall' && e.scope === 'house')
+  }
 
   const b = project.building
   const base = baseAbs(project)
