@@ -109,6 +109,7 @@ export function PermitReader({ project, doc }: { project: Project; doc: PDFDocum
       extracted: { ...p.extracted, north: 'מחץ הצפון בתוכנית', ...(area ? { plotArea: 'מגבול המגרש בתוכנית' } : {}) },
     }))
     if (s.snap?.snapped) note(`קו המתאר הוצמד לקווי הקיר שבשרטוט עצמו: ${s.snap.snapped} מתוך ${s.snap.edges} צלעות. המיקום מדויק כמו בהיתר.`)
+    if (s.snap?.plotSnapped) note(`גבול המגרש הוצמד לקו שלו בשרטוט: ${s.snap.plotSnapped} מתוך ${s.snap.plotEdges} צלעות.`)
     note(`נקראו ${s.units.length} יחידות, ${s.openings.length} פתחים, ${s.zones.length} אזורי גינה, ${s.levels.length} מפלסים, ${s.trees.length} עצים`)
   }
 

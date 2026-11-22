@@ -129,7 +129,7 @@ export interface PlanStructure {
   levels: { text: string; abs: number | null; rel: number | null; at: Pt }[]
   trees: { at: Pt; r: number; kind: 'tree' | 'palm' | 'shrub' }[]
   retaining: { a: Pt; b: Pt; label: string }[]
-  snap?: { snapped: number; edges: number; raw?: Pt[][] } // raw: קו המתאר כפי שהבינה קראה אותו, לפני ההצמדה. כמה צלעות של קו המתאר הוצמדו לקווי הקיר הווקטוריים
+  snap?: { snapped: number; edges: number; raw?: Pt[][]; plotSnapped?: number; plotEdges?: number; plotRaw?: Pt[] } // raw: קו המתאר כפי שהבינה קראה אותו, לפני ההצמדה. כמה צלעות של קו המתאר הוצמדו לקווי הקיר הווקטוריים
   readAt: string
 }
 
